@@ -18,8 +18,15 @@ public:
 
     void processEvent(Event event);
 
+    bool isIdle() const;
+
+    bool isBusy() const;
+
+    bool isFault() const;
+
     State getCurrentState() const;
 
+    
     
 private:
 

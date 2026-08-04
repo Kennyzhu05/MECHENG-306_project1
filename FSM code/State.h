@@ -3,6 +3,7 @@
 
 enum class State
 {
+    INITIALIZING,
     IDLE,
     HOMING,
     MOVING,

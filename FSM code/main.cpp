@@ -1,63 +1,84 @@
-#include <iostream>
-#include <string>
-
 #include "FSM.h"
-const char* stateToString(State state)
-{
-    switch (state)
-    {
-        case State::IDLE:    return "IDLE";
-        case State::HOMING:  return "HOMING";
-        case State::MOVING:  return "MOVING";
-        case State::FAULT:   return "FAULT";
-        default:             return "UNKNOWN";
-    }
-}
 
-int main()
+FSM fsm;
+
+void setup()
 {
-    FSM fsm;
+    Serial.begin(115200);
 
     fsm.begin();
 
-    std::string command;
+    Serial.println("FSM Test");
+    Serial.println("--------------------");
+}
 
-    while (true)
+void loop()
+{
+    if (Serial.available())
     {
-        std::cout << "\nCurrent State: "
-                  << stateToString(fsm.getCurrentState())
-                  << '\n';
+        char c = Serial.read();
 
-        std::cout << "Command> ";
+        switch (c)
+        {
+        case 'i':
 
-        std::getline(std::cin, command);
+            fsm.processEvent(Event::INIT_SUCCESS);
 
-        if (command == "quit")
             break;
 
-        if (command == "G28")
+        case 'f':
+
+            fsm.processEvent(Event::INIT_FAILED);
+
+            break;
+
+        case 'h':
+
             fsm.processEvent(Event::G28_RECEIVED);
 
-        else if (command == "G1")
+            break;
+
+        case 'm':
+
             fsm.processEvent(Event::G1_RECEIVED);
 
-        else if (command == "HOME_DONE")
+            break;
+
+        case 'H':
+
             fsm.processEvent(Event::HOME_COMPLETE);
 
-        else if (command == "MOVE_DONE")
+            break;
+
+        case 'M':
+
             fsm.processEvent(Event::MOVE_COMPLETE);
 
-        else if (command == "LIMIT")
+            break;
+
+        case 'l':
+
             fsm.processEvent(Event::LIMIT_TRIGGERED);
 
-        else if (command == "RESET")
+            break;
+
+        case 't':
+
+            fsm.processEvent(Event::TIMEOUT);
+
+            break;
+
+        case 'r':
+
             fsm.processEvent(Event::RESET);
 
-        else
-            std::cout << "Unknown command.\n";
+            break;
+        }
 
-        fsm.update();
+        Serial.print("Current State: ");
+
+        Serial.println(stateToString(fsm.getCurrentState()));
     }
 
-    return 0;
+    fsm.update();
 }

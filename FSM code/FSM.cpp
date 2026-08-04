@@ -1,8 +1,9 @@
 #include "FSM.h"
 
+// Start with initialzing state
 FSM::FSM()
 {
-    currentState = State::IDLE;
+    currentState = State::INITIALIZING;
 }
 
 void FSM::begin()
@@ -18,6 +19,24 @@ void FSM::update()
 State FSM::getCurrentState() const
 {
     return currentState;
+}
+
+bool isIdle() const{
+    if (currentState == State::IDLE) {
+        return true;
+    }
+     return false;
+}
+
+bool isBusy() const{
+    if (currentState == State::MOVING || currentState == State::HOMING || currentState == State::INITIALIZING); {
+        return true;
+    }
+     return false; 
+}
+
+bool isFault() const{
+    return currentState == State::FAULT;
 }
 
 void FSM::updateState()
@@ -66,34 +85,29 @@ void FSM::enterState(State state)
 {
     switch(state)
     {
+        case State::INITIALIZING:
+            Serial.println("Entering INITIALIZING:");
+   
+            break;
+
         case State::IDLE:
-            std::cout << "Entering IDLE\n";
-            //Serial.println("Entering IDLE");
-            //restore the serial print while testing on Arduino. 
+            Serial.println("Entering IDLE");
+       
             break;
 
         case State::HOMING:
-            std::cout << "Entering HOMING\n";
-            //Serial.println("Entering HOMING");
-            //restore the serial print while testing on Arduino. 
-        
-
+            Serial.println("Entering HOMING");
+    
             break;
 
         case State::MOVING:
-            std::cout << "Entering MOVING\n";
-            //Serial.println("Entering MOVING");
-            //restore the serial print while testing on Arduino. 
-    
-
+            Serial.println("Entering MOVING");
+            
             break;
 
         case State::FAULT:
-
-            std::cout << "Entering FAULT\n";
-            //Serial.println("Entering FAULT");
-            //restore the serial print while testing on Arduino. 
-
+            Serial.println("Entering FAULT");
+           
             break;
     }
 }
@@ -102,32 +116,30 @@ void FSM::exitState(State state)
 {
     switch(state)
     {
+        case State::INITIALIZING:
+            Serial.println("Leaving INITIALIZING:");
+           
+            break;
+
         case State::IDLE:
-            std::cout << "Leaving IDLE\n";
-            //Serial.println("Leaving IDLE");
-            //restore the serial print while testing on Arduino.
+            Serial.println("Leaving IDLE");
+           
 
             break;
 
         case State::HOMING:
-            std::cout << "Leaving HOMING\n";
-            //Serial.println("Leaving HOMING");
-            //restore the serial print while testing on Arduino.
+            Serial.println("Leaving HOMING");
 
             break;
 
         case State::MOVING:
-            std::cout << "Leaving MOVING\n";
-            //Serial.println("Leaving MOVING");
-            //restore the serial print while testing on Arduino.
-
+            Serial.println("Leaving MOVING");
+            
             break;
 
         case State::FAULT:
-            std::cout << "Leaving FAULT\n";
-            //Serial.println("Leaving FAULT");
-            //restore the serial print while testing on Arduino.
-
+            Serial.println("Leaving FAULT");
+           
             break;
     }
 }
@@ -156,6 +168,15 @@ void FSM::faultUpdate()
 void FSM::processEvent(Event event){
     switch(currentState)
     {
+        case State::INITIALIZING:
+
+            if (event == Event::INIT_SUCCESS)
+                changeState(State::IDLE);
+
+            else if (event == Event::INIT_FAILED)
+                changeState(State::FAULT);
+            break;
+
         case State::IDLE:
 
             if(event == Event::G28_RECEIVED)
@@ -163,6 +184,9 @@ void FSM::processEvent(Event event){
 
             else if(event == Event::G1_RECEIVED)
                 changeState(State::MOVING);
+
+            else if (event == Event::LIMIT_TRIGGERED)
+                changeState(State::FAULT);
 
             break;
 
@@ -172,6 +196,9 @@ void FSM::processEvent(Event event){
                 changeState(State::IDLE);
 
             else if(event == Event::LIMIT_TRIGGERED)
+                changeState(State::FAULT);
+
+            else if (event == Event::TIMEOUT)
                 changeState(State::FAULT);
 
             break;
@@ -193,6 +220,7 @@ void FSM::processEvent(Event event){
 
             if(event == Event::RESET)
                 changeState(State::IDLE);
+            // Or maybe return to INITIALIZATION
 
             break;
     }
