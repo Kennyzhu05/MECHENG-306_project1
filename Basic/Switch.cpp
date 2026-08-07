@@ -1,6 +1,4 @@
-// =======================================================
-// LIMIT SWITCH CONFIGURATION
-// =======================================================
+#include "Switch.h"
 
 // Limit Switch Pins
 const int TOP_SWITCH_PIN    = 25;
@@ -15,12 +13,10 @@ bool RIGHT_SWITCH_TOUCHED  = false;
 bool LEFT_SWITCH_TOUCHED   = false;
 
 
-// =======================================================
 // LIMIT SWITCH FUNCTIONS
-// =======================================================
 
 // Configure all limit switch pins
-void setupLimitSwitches()
+void setupSwitches()
 {
     pinMode(TOP_SWITCH_PIN, INPUT_PULLUP);
     pinMode(BOTTOM_SWITCH_PIN, INPUT_PULLUP);
