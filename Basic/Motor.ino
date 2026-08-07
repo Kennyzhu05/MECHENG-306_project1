@@ -6,7 +6,7 @@ const int M_1_PWM = 5;
 const int M_2 = 7;
 const int M_2_PWM = 6;
 
-void setup() {
+void setupMotors() {
   pinMode (M_1, OUTPUT);
   pinMode(M_1_PWM, OUTPUT);
 
@@ -88,8 +88,3 @@ void moveBottomRight(int pwm) {
   digitalWrite(M_2, HIGH);
   analogWrite(M_2_PWM, pwm);
 }
-
-void loop() {
-  // Motion
-}
-

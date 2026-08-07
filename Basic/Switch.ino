@@ -32,10 +32,10 @@ void setupLimitSwitches()
 // Read every limit switch and update the stored states
 void updateLimitSwitches()
 {
-    TOP_SWITCH_TOUCHED    = (digitalRead(TOP_SWITCH_PIN) == LOW);
-    BOTTOM_SWITCH_TOUCHED = (digitalRead(BOTTOM_SWITCH_PIN) == LOW);
-    RIGHT_SWITCH_TOUCHED  = (digitalRead(RIGHT_SWITCH_PIN) == LOW);
-    LEFT_SWITCH_TOUCHED   = (digitalRead(LEFT_SWITCH_PIN) == LOW);
+    TOP_SWITCH_TOUCHED    = (digitalRead(TOP_SWITCH_PIN) == HIGH);
+    BOTTOM_SWITCH_TOUCHED = (digitalRead(BOTTOM_SWITCH_PIN) == HIGH);
+    RIGHT_SWITCH_TOUCHED  = (digitalRead(RIGHT_SWITCH_PIN) == HIGH);
+    LEFT_SWITCH_TOUCHED   = (digitalRead(LEFT_SWITCH_PIN) == HIGH);
 }
 
 
