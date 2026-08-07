@@ -1,4 +1,6 @@
 #include "FSM.h"
+#include "FSM.h"
+#include "LinearMotion.h"
 
 FSM fsm;
 
@@ -39,10 +41,25 @@ void loop()
             break;
 
         case 'm':
+        {
 
+            // Temporary test target:
+            // Equivalent to receiving G1 X50 Y30
+            setLinearTarget(50.0f, 30.0f);
+
+            // Tell the FSM that the G1 command is ready
             fsm.processEvent(Event::G1_RECEIVED);
 
+            MotionCommand command = getLinearTarget();
+
+            Serial.print("Target X: ");
+            Serial.print(command.targetX_mm);
+            Serial.print(" mm, Target Y: ");
+            Serial.print(command.targetY_mm);
+            Serial.println(" mm");
+
             break;
+        }
 
         case 'H':
 
