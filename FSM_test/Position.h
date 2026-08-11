@@ -1,42 +1,36 @@
 #ifndef POSITION_H
 #define POSITION_H
 
-// Cartesian position of the pen
 struct CartesianPosition
 {
     float x_mm;
     float y_mm;
 };
 
-// Set the encoder calibration values.
-//
-// These values describe how many encoder counts correspond
-// to one millimetre of belt movement for each motor.
-void configurePositionScale(
+// Set experimentally determined encoder scale.
+// These will be measured during a later hardware test.
+bool configurePositionScale(
     float motor1CountsPerMm,
     float motor2CountsPerMm
 );
 
-// Set the current encoder counts as X = 0 mm, Y = 0 mm.
-//
-// This should normally be called after homing is complete.
+// Define the current encoder position as machine zero.
 void setPositionOrigin(
     long motor1Count,
     long motor2Count
 );
 
-// Calculate the current X-Y position using the latest
-// encoder counts.
-void updatePosition(
+// Calculate current X-Y position.
+bool updatePosition(
     long motor1Count,
     long motor2Count
 );
 
-// Return the latest calculated position.
 CartesianPosition getCurrentPosition();
 
-// Optional convenience functions.
 float getCurrentX();
 float getCurrentY();
+
+bool positionScaleConfigured();
 
 #endif
