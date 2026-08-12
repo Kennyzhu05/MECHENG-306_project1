@@ -2,7 +2,7 @@
 #define FSM_H
 
 
-#include <arduino.h>
+#include "Arduino.h"
 #include "State.h"
 #include "Event.h"
 

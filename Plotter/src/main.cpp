@@ -3,14 +3,14 @@
 #include "Switch.h"
 #include "RoundTesting.h"
 #include "Encoder.h"
-#include "FSM.h"
-#include "Homing.h"
+#include "Motion.h"
 #include "GcodeParser.h"
-
-
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
 FSM fsm;
-String command;
+GCodeParser gcodeParser(fsm);
 
 void setup()
 {
@@ -23,13 +23,15 @@ void setup()
   // Initialize
   resetEncoders();
   stopMotors();
-
+  
   Serial.println("PROGRAM STARTED");
   fsm.begin();
   // Tell FSM that initialisation was successful
   fsm.processEvent(Event::INIT_SUCCESS);
   startHoming();
 }
+
+bool moveDone = false;
 
 void loop()
 {
