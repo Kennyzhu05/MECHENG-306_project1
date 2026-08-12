@@ -8,9 +8,12 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include "FSM.h"
+#include "Homing.h"
 
 FSM fsm;
 GCodeParser gcodeParser(fsm);
+String command;
 
 void setup()
 {
