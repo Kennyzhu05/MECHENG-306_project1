@@ -20,12 +20,13 @@ void setup()
   Serial.begin(115200);
 
   setupMotors();
+  stopMotors();
+
   setupSwitches();
   setupEncoders();
 
   // Initialize
   resetEncoders();
-  stopMotors();
   
   Serial.println("PROGRAM STARTED");
   fsm.begin();
@@ -38,21 +39,31 @@ bool moveDone = false;
 
 void loop()
 {
-    // Keep the physical limit-switch states updated
-    updateLimitSwitches();
+  if (!moveDone) {
+    moveXY(1000, 1000);
+    long motorA = getLeftEncoderCount();
+    long motorB = getRightEncoderCount();
 
-    // Update the FSM
-    fsm.update();
-if (Serial.available())
-    {
-        command = Serial.readStringUntil('\n');
-        command.trim();
+    long finalX = (motorA + motorB) / 2;
+    long finalY = (motorA - motorB) / 2;
 
-        Serial.print("Received: ");
-        Serial.println(command);
+    Serial.print("Final X: ");
+    Serial.println(finalX);
+    Serial.print("Final Y: ");
+    Serial.println(finalY);
+    moveDone = true;
+  }
 
-        // Later:
-        // processGCode(command);
-    }
-    // Other system tasks can go here
+  if (Serial.available())
+  {
+    command = Serial.readStringUntil('\n');
+    command.trim();
+
+    Serial.print("Received: ");
+    Serial.println(command);
+
+    // Later:
+    // processGCode(command);
+  }
+  // Other system tasks can go here
 }
