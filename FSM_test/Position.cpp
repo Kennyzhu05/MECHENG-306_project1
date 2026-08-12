@@ -1,45 +1,42 @@
 #include "Position.h"
 
-// Latest calculated pen position
 static CartesianPosition currentPosition = {0.0f, 0.0f};
 
-// Encoder values recorded at the home position
 static long motor1OriginCount = 0;
 static long motor2OriginCount = 0;
 
-// Temporary calibration values.
-//
-// These must be replaced later with measured or calculated
-// counts-per-millimetre values.
-static float motor1CountsPerMm = 1.0f;
-static float motor2CountsPerMm = 1.0f;
+// No fake default calibration value.
+static float motor1CountsPerMm = 0.0f;
+static float motor2CountsPerMm = 0.0f;
+
+static bool configured = false;
 
 
-// -------------------------------------------------------
-// Configure encoder-to-distance conversion
-// -------------------------------------------------------
-
-void configurePositionScale(
+bool configurePositionScale(
     float newMotor1CountsPerMm,
     float newMotor2CountsPerMm
 )
 {
-    // Prevent division by zero or invalid negative scales
-    if (newMotor1CountsPerMm > 0.0f)
+    if (newMotor1CountsPerMm <= 0.0f ||
+        newMotor2CountsPerMm <= 0.0f)
     {
-        motor1CountsPerMm = newMotor1CountsPerMm;
+        configured = false;
+        return false;
     }
 
-    if (newMotor2CountsPerMm > 0.0f)
-    {
-        motor2CountsPerMm = newMotor2CountsPerMm;
-    }
+    motor1CountsPerMm = newMotor1CountsPerMm;
+    motor2CountsPerMm = newMotor2CountsPerMm;
+
+    configured = true;
+    return true;
 }
 
 
-// -------------------------------------------------------
-// Establish the Cartesian origin
-// -------------------------------------------------------
+bool positionScaleConfigured()
+{
+    return configured;
+}
+
 
 void setPositionOrigin(
     long motor1Count,
@@ -54,66 +51,69 @@ void setPositionOrigin(
 }
 
 
-// -------------------------------------------------------
-// Convert encoder counts into X-Y position
-// -------------------------------------------------------
-
-void updatePosition(
+bool updatePosition(
     long motor1Count,
     long motor2Count
 )
 {
-    // Calculate the change in encoder counts since homing
+    if (!configured)
+    {
+        return false;
+    }
+
     long motor1RelativeCount =
         motor1Count - motor1OriginCount;
 
     long motor2RelativeCount =
         motor2Count - motor2OriginCount;
 
-    // Convert each motor's encoder movement into millimetres
+
+    // Convert encoder counts into motor displacement.
     float motor1MovementMm =
         motor1RelativeCount / motor1CountsPerMm;
 
     float motor2MovementMm =
         motor2RelativeCount / motor2CountsPerMm;
 
+
     /*
-       XY plotter kinematic conversion:
-
-       Right:
-           M1 positive, M2 positive
-
-       Left:
-           M1 negative, M2 negative
-
-       Up:
-           M1 positive, M2 negative
-
-       Down:
-           M1 negative, M2 positive
-    */
+     * Course kinematics:
+     *
+     * A = left motor  = M2
+     * B = right motor = M1
+     *
+     * ΔX = (ΔA + ΔB) / 2
+     * ΔY = (ΔA - ΔB) / 2
+     *
+     * Therefore:
+     *
+     * X = (M2 + M1) / 2
+     * Y = (M2 - M1) / 2
+     */
 
     currentPosition.x_mm =
-        0.5f * (motor1MovementMm + motor2MovementMm);
+        0.5f * (motor2MovementMm +
+                motor1MovementMm);
 
     currentPosition.y_mm =
-        0.5f * (motor1MovementMm - motor2MovementMm);
+        0.5f * (motor2MovementMm -
+                motor1MovementMm);
+
+    return true;
 }
 
-
-// -------------------------------------------------------
-// Position getters
-// -------------------------------------------------------
 
 CartesianPosition getCurrentPosition()
 {
     return currentPosition;
 }
 
+
 float getCurrentX()
 {
     return currentPosition.x_mm;
 }
+
 
 float getCurrentY()
 {
