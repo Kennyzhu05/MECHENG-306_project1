@@ -79,6 +79,9 @@ void FSM::changeState(State newState)
     currentState = newState;
 
     enterState(currentState);
+
+    // debug
+  Serial.println("State changed.");
 }
 
 void FSM::enterState(State state)

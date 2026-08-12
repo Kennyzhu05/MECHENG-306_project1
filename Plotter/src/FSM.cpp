@@ -1,4 +1,5 @@
 #include "FSM.h"
+#include "Homing.h"
 
 // Start with initialzing state
 FSM::FSM()
@@ -155,6 +156,7 @@ void FSM::idleUpdate()
 
 void FSM::homingUpdate()
 {
+   startHoming();
 }
 
 void FSM::movingUpdate()

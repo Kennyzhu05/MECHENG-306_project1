@@ -1,8 +1,7 @@
 #ifndef FSM_H
 #define FSM_H
 
-
-#include <arduino.h>
+#include <Arduino.h>  
 #include "State.h"
 #include "Event.h"
 
@@ -18,11 +17,11 @@ public:
 
     void processEvent(Event event);
 
-    bool isIdle() const;
+    bool FSM::isIdle() const;
 
-    bool isBusy() const;
+    bool FSM::isBusy() const;
 
-    bool isFault() const;
+    bool FSM::isFault() const;
 
     State getCurrentState() const;
 
