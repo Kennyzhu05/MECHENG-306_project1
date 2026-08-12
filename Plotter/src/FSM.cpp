@@ -21,21 +21,21 @@ State FSM::getCurrentState() const
     return currentState;
 }
 
-bool isIdle() const{
+bool FSM::isIdle() const{
     if (currentState == State::IDLE) {
         return true;
     }
      return false;
 }
 
-bool isBusy() const{
+bool FSM::isBusy() const{
     if (currentState == State::MOVING || currentState == State::HOMING || currentState == State::INITIALIZING); {
         return true;
     }
      return false; 
 }
 
-bool isFault() const{
+bool FSM::isFault() const{
     return currentState == State::FAULT;
 }
 
