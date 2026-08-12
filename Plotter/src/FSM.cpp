@@ -156,7 +156,12 @@ void FSM::idleUpdate()
 
 void FSM::homingUpdate()
 {
-   startHoming();
+   updateHoming();
+
+    if (isHomingComplete())
+    {
+        processEvent(Event::HOME_COMPLETE);
+    }
 }
 
 void FSM::movingUpdate()
@@ -173,7 +178,7 @@ void FSM::processEvent(Event event){
         case State::INITIALIZING:
 
             if (event == Event::INIT_SUCCESS)
-                changeState(State::IDLE);
+                changeState(State::HOMING);
 
             else if (event == Event::INIT_FAILED)
                 changeState(State::FAULT);
@@ -181,8 +186,10 @@ void FSM::processEvent(Event event){
 
         case State::IDLE:
 
-            if(event == Event::G28_RECEIVED)
+            if(event == Event::G28_RECEIVED){
                 changeState(State::HOMING);
+                startHoming();
+            }
 
             else if(event == Event::G1_RECEIVED)
                 changeState(State::MOVING);
