@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 #include "Motion.h"
 #include "Motor.h"
 #include "Encoder.h"
@@ -14,6 +15,33 @@ long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
 int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
 
 unsigned long MOVE_TIMEOUT_MS = 8000;   // safety cutoff
+
+// ---- Encoder calibration from five boundary-test runs ----
+// X movement:
+//   mean left count  = 20276.4
+//   mean right count = 19807.8
+//   Cartesian X count = (20276.4 + 19807.8) / 2 = 20042.1
+//   X_COUNTS_PER_MM = 20042.1 / 220 mm
+//
+// Y movement:
+//   mean left count  = 12393.6
+//   mean right count = -12285.6
+//   Cartesian Y count = (12393.6 - (-12285.6)) / 2 = 12339.6
+//   Y_COUNTS_PER_MM = 12339.6 / 130 mm
+const float X_COUNTS_PER_MM = 20042.1f / 220.0f;
+const float Y_COUNTS_PER_MM = 12339.6f / 130.0f;
+
+
+long xMmToCounts(float distanceMm)
+{
+    return lroundf(distanceMm * X_COUNTS_PER_MM);
+}
+
+
+long yMmToCounts(float distanceMm)
+{
+    return lroundf(distanceMm * Y_COUNTS_PER_MM);
+}
 
 
 static int clampInt(int value, int lo, int hi)
@@ -137,4 +165,25 @@ void moveX(long targetCounts)
 void moveY(long targetCounts)
 {
     moveXY(0, targetCounts);
+}
+
+
+void moveXYmm(float targetXmm, float targetYmm)
+{
+    long targetXCounts = xMmToCounts(targetXmm);
+    long targetYCounts = yMmToCounts(targetYmm);
+
+    moveXY(targetXCounts, targetYCounts);
+}
+
+
+void moveXmm(float targetMm)
+{
+    moveXYmm(targetMm, 0.0f);
+}
+
+
+void moveYmm(float targetMm)
+{
+    moveXYmm(0.0f, targetMm);
 }
