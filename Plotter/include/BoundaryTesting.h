@@ -1,6 +1,10 @@
 #ifndef BOUNDARY_TESTING_H
 #define BOUNDARY_TESTING_H
 
+// Travel counts functions
+long yTravelCounts(long topLeftCount, long topRightCount);
+long xTravelCounts(long rightLeftCount, long rightRightCount);
+
 // Call once from setup() to initialise and start the two boundary tests.
 void beginBoundaryTest();
 

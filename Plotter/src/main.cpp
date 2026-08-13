@@ -10,6 +10,7 @@
 #include <string.h>
 #include "FSM.h"
 #include "Homing.h"
+#include "BoundaryTesting.h"
 
 FSM fsm;
 GCodeParser gcodeParser(fsm);
@@ -28,6 +29,8 @@ void setup()
   // Initialize
   resetEncoders();
   
+  beginBoundaryTest();
+
   Serial.println("PROGRAM STARTED");
   fsm.begin();
   // Tell FSM that initialisation was successful
@@ -39,19 +42,30 @@ bool moveDone = false;
 
 void loop()
 {
-  if (!moveDone) {
-    moveXY(1000, 1000);
-    long motorA = getLeftEncoderCount();
-    long motorB = getRightEncoderCount();
+  // if (!moveDone) {
+  //   moveXY(1000, 1000);
+  //   long motorA = getLeftEncoderCount();
+  //   long motorB = getRightEncoderCount();
 
-    long finalX = (motorA + motorB) / 2;
-    long finalY = (motorA - motorB) / 2;
+  //   long finalX = (motorA + motorB) / 2;
+  //   long finalY = (motorA - motorB) / 2;
 
-    Serial.print("Final X: ");
-    Serial.println(finalX);
-    Serial.print("Final Y: ");
-    Serial.println(finalY);
-    moveDone = true;
+  //   Serial.print("Final X: ");
+  //   Serial.println(finalX);
+  //   Serial.print("Final Y: ");
+  //   Serial.println(finalY);
+  //   moveDone = true;
+  // }
+
+  updateBoundaryTest();
+
+  if (isBoundaryTestComplete() || hasBoundaryTestFault())
+  {
+    while (true)
+    {
+      // Stop the program here if the boundary test is complete or has a fault
+      delay(1000);
+    }
   }
 
   if (Serial.available())

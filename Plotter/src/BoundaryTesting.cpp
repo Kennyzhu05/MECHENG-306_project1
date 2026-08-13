@@ -6,6 +6,17 @@
 #include "Motor.h"
 #include "Switch.h"
 
+// Travel counts functions
+long yTravelCounts(long topLeftCount, long topRightCount)
+{
+    return (topLeftCount - topRightCount) / 2;
+}
+
+long xTravelCounts(long rightLeftCount, long rightRightCount)
+{
+    return (rightLeftCount + rightRightCount) / 2;
+}
+
 namespace
 {
 // This is the same test speed used by the existing RoundTesting.cpp.
@@ -55,22 +66,40 @@ void stopWithFault(const __FlashStringHelper* reason)
 void printTopCounts()
 {
     Serial.println();
+    // Left & Right encoder counts
     Serial.println(F("===== TOP BOUNDARY REACHED ====="));
     Serial.print(F("Left encoder count, origin to top:  "));
     Serial.println(topLeftCount);
     Serial.print(F("Right encoder count, origin to top: "));
     Serial.println(topRightCount);
+    // X travel counts
+    long xTravel = xTravelCounts(rightLeftCount, rightRightCount);
+    Serial.print(F("X travel counts: "));
+    Serial.println(xTravel);
+    // Y travel counts
+    long yTravel = yTravelCounts(topLeftCount, topRightCount);
+    Serial.print(F("Y travel counts: "));
+    Serial.println(yTravel);
     Serial.println(F("================================"));
 }
 
 void printRightCounts()
 {
     Serial.println();
+    // Left & Right encoder counts
     Serial.println(F("===== RIGHT BOUNDARY REACHED ====="));
     Serial.print(F("Left encoder count, origin to right:  "));
     Serial.println(rightLeftCount);
     Serial.print(F("Right encoder count, origin to right: "));
     Serial.println(rightRightCount);
+    // X travel counts
+    long xTravel = xTravelCounts(rightLeftCount, rightRightCount);
+    Serial.print(F("X travel counts: "));
+    Serial.println(xTravel);
+    // Y travel counts
+    long yTravel = yTravelCounts(topLeftCount, topRightCount);
+    Serial.print(F("Y travel counts: "));
+    Serial.println(yTravel);
     Serial.println(F("=================================="));
 }
 } // namespace
@@ -132,6 +161,8 @@ void updateBoundaryTest()
                 stopMotors();
                 updateEncoders();
 
+                rightLeftCount = getLeftEncoderCount();
+                rightRightCount = getRightEncoderCount();
                 topLeftCount = getLeftEncoderCount();
                 topRightCount = getRightEncoderCount();
                 printTopCounts();
@@ -180,6 +211,8 @@ void updateBoundaryTest()
 
                 rightLeftCount = getLeftEncoderCount();
                 rightRightCount = getRightEncoderCount();
+                topLeftCount = getLeftEncoderCount();
+                topRightCount = getRightEncoderCount();
                 printRightCounts();
 
                 Serial.println();
