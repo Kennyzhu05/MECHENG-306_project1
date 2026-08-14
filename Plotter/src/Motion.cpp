@@ -461,39 +461,23 @@ void updateMotion()
     // ANTI-WINDUP
     // ===================================================
 
-    bool saturatedPositiveA =
-        outputA > MAX_PWM &&
-        errorA > 0;
+    bool saturatedPositiveA = outputA > MAX_PWM && errorA > 0;
+    bool saturatedNegativeA = outputA < -MAX_PWM && errorA < 0;
+    bool parkedA = absoluteLong(errorA) <= POSITION_TOLERANCE;
 
-    bool saturatedNegativeA =
-        outputA < -MAX_PWM &&
-        errorA < 0;
-
-
-    if (!saturatedPositiveA &&
-        !saturatedNegativeA)
+    if (!saturatedPositiveA && !saturatedNegativeA && !parkedA)
     {
-        integralA +=
-            static_cast<float>(errorA) *
-            dt;
+        integralA += static_cast<float>(errorA) * dt;
     }
 
 
-    bool saturatedPositiveB =
-        outputB > MAX_PWM &&
-        errorB > 0;
+    bool saturatedPositiveB = outputB > MAX_PWM && errorB > 0;
+    bool saturatedNegativeB = outputB < -MAX_PWM && errorB < 0;
+    bool parkedB = absoluteLong(errorB) <= POSITION_TOLERANCE;
 
-    bool saturatedNegativeB =
-        outputB < -MAX_PWM &&
-        errorB < 0;
-
-
-    if (!saturatedPositiveB &&
-        !saturatedNegativeB)
+    if (!saturatedPositiveB && !saturatedNegativeB && !parkedB)
     {
-        integralB +=
-            static_cast<float>(errorB) *
-            dt;
+        integralB += static_cast<float>(errorB) * dt;
     }
 
 

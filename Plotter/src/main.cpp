@@ -44,16 +44,6 @@ void loop()
 {
   if (!moveDone) {
     moveXYmm(-80, 0);
-    long motorA = getLeftEncoderCount();
-    long motorB = getRightEncoderCount();
-
-    long finalX = (motorA + motorB) / 2;
-    long finalY = (motorA - motorB) / 2;
-
-    Serial.print("Final X: ");
-    Serial.println(finalX);
-    Serial.print("Final Y: ");
-    Serial.println(finalY);
     moveDone = true;
   }
 
