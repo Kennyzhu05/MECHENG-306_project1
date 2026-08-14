@@ -80,4 +80,7 @@ void loop()
     // processGCode(command);
   }
   // Other system tasks can go here
+
+  // Update the G-code queue after fsm.update();
+  // gcodeParser.updateCommandQueue();
 }

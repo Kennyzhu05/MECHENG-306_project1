@@ -15,7 +15,10 @@ GCodeParser::GCodeParser(FSM& fsmReference)
       targetX(0.0f),
       targetY(0.0f),
       lastFeedRate(100.0f),
-      targetFeedRate(100.0f)
+      targetFeedRate(100.0f),
+      queueHead(0),
+      queueTail(0),
+      queueCount(0)
 {
     commandBuffer[0] = '\0';
 }
@@ -106,10 +109,39 @@ void GCodeParser::parseGCode(char* command)
     // -----------------------------
 
     if (parseG1(command))
+{
+    // If machine is IDLE, execute G1 immediately
+    if (fsm.isIdle())
     {
+        Serial.println("G1 accepted: executing now");
+
         fsm.processEvent(Event::G1_RECEIVED);
-        return;
     }
+
+    // If machine is busy, store command in queue
+    else if (fsm.isBusy())
+    {
+        if (enqueueG1(
+                targetX,
+                targetY,
+                targetFeedRate))
+        {
+            Serial.println("G1 queued");
+        }
+        else
+        {
+            Serial.println("ERROR: G1 queue full");
+        }
+    }
+
+    // If machine is in FAULT, reject command
+    else if (fsm.isFault())
+    {
+        Serial.println("ERROR: G1 rejected - system in FAULT");
+    }
+
+    return;
+}
 
     Serial.println("ERROR: invalid G-code");
 }
@@ -362,4 +394,120 @@ float GCodeParser::getTargetY() const
 float GCodeParser::getTargetFeedRate() const
 {
     return targetFeedRate;
+}
+
+// =====================================================
+// Add G1 command to queue
+// =====================================================
+
+bool GCodeParser::enqueueG1(
+    float x,
+    float y,
+    float f
+)
+{
+    // Queue is full
+    if (queueCount >= QUEUE_SIZE)
+    {
+        return false;
+    }
+
+    // Store command at tail
+    commandQueue[queueTail].x = x;
+    commandQueue[queueTail].y = y;
+    commandQueue[queueTail].f = f;
+
+    // Move tail forward
+    queueTail++;
+
+    // Circular wrap-around
+    if (queueTail >= QUEUE_SIZE)
+    {
+        queueTail = 0;
+    }
+
+    queueCount++;
+
+    return true;
+}
+
+
+// =====================================================
+// Remove oldest G1 command from queue
+// =====================================================
+
+bool GCodeParser::dequeueG1(
+    G1Command& command
+)
+{
+    // Queue is empty
+    if (queueCount == 0)
+    {
+        return false;
+    }
+
+    // Copy oldest command
+    command = commandQueue[queueHead];
+
+    // Move head forward
+    queueHead++;
+
+    // Circular wrap-around
+    if (queueHead >= QUEUE_SIZE)
+    {
+        queueHead = 0;
+    }
+
+    queueCount--;
+
+    return true;
+}
+
+// =====================================================
+// Execute queued G1 commands
+// =====================================================
+
+void GCodeParser::updateCommandQueue()
+{
+    /*
+      A queued G1 command can only start when
+      the FSM returns to IDLE.
+    */
+
+    if (!fsm.isIdle())
+    {
+        return;
+    }
+
+    // Nothing waiting
+    if (queueCount == 0)
+    {
+        return;
+    }
+
+    G1Command nextCommand;
+
+    if (!dequeueG1(nextCommand))
+    {
+        return;
+    }
+
+    // Load queued command back into active target variables
+    targetX = nextCommand.x;
+    targetY = nextCommand.y;
+    targetFeedRate = nextCommand.f;
+
+    Serial.println("Executing queued G1");
+
+    Serial.print("X = ");
+    Serial.println(targetX);
+
+    Serial.print("Y = ");
+    Serial.println(targetY);
+
+    Serial.print("F = ");
+    Serial.println(targetFeedRate);
+
+    // IDLE -> MOVING
+    fsm.processEvent(Event::G1_RECEIVED);
 }
