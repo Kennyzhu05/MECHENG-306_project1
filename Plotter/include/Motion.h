@@ -1,48 +1,115 @@
 #ifndef MOTION_H
 #define MOTION_H
 
-// ---- PI gains (tune for your platform) ----
+
+// =======================================================
+// CONTROLLER SETTINGS
+// =======================================================
+
 extern float KP;
 extern float KI;
 
-// ---- PWM limits ----
-extern int MIN_PWM;   // minimum PWM to overcome static friction
-extern int MAX_PWM;   // maximum output speed cap
+// Synchronisation gain used to keep both motors coordinated.
+extern float SYNC_KP;
 
-// ---- Stopping criteria ----
-extern long POSITION_TOLERANCE;  // encoder counts considered "close enough"
-extern int SETTLE_SAMPLES;       // consecutive in-tolerance loops before stopping
 
-// ---- Safety ----
+// =======================================================
+// PWM LIMITS
+// =======================================================
+
+extern int MIN_PWM;
+extern int MAX_PWM;
+
+
+// =======================================================
+// STOPPING CONDITIONS
+// =======================================================
+
+extern long POSITION_TOLERANCE;
+extern int SETTLE_SAMPLES;
+
+
+// =======================================================
+// SAFETY
+// =======================================================
+
 extern unsigned long MOVE_TIMEOUT_MS;
 
-// ---- Experimentally measured encoder scale ----
-// Boundary-test results:
-//   X: 20042.1 Cartesian counts over 220 mm
-//   Y: 12339.6 Cartesian counts over 130 mm
+
+// =======================================================
+// ENCODER CALIBRATION
+// =======================================================
+
 extern const float X_COUNTS_PER_MM;
 extern const float Y_COUNTS_PER_MM;
 
-// Convert a Cartesian distance in millimetres into encoder counts.
+
+// Convert Cartesian millimetres into average encoder counts.
 long xMmToCounts(float distanceMm);
 long yMmToCounts(float distanceMm);
 
-// Move the platform by targetXCounts / targetYCounts (encoder counts
-// along the X and Y axes). Converts to per-motor targets via the
-// kinematics (targetA = targetX + targetY, targetB = targetX - targetY)
-// and drives each motor independently under closed-loop PI control, so
-// the two motors stay synchronized even if their speeds don't match.
-void moveXY(long targetXCounts, long targetYCounts);
 
-// Convenience wrappers for single-axis moves
+// =======================================================
+// NON-BLOCKING FSM MOTION INTERFACE
+// =======================================================
+
+// Store a relative XY target in millimetres.
+// This function stores the target but does not start movement.
+void setMotionTargetMm(
+    float targetXmm,
+    float targetYmm
+);
+
+
+// Start the previously stored target.
+// Returns false if no target has been stored.
+bool startMotion();
+
+
+// Perform one iteration of encoder reading and PI control.
+// Call this repeatedly from FSM::movingUpdate().
+void updateMotion();
+
+
+// Motion status functions
+bool isMotionActive();
+bool isMotionComplete();
+bool hasMotionTimedOut();
+
+
+// Stop the motors and reset the motion controller.
+void resetMotion();
+
+
+// =======================================================
+// LEGACY BLOCKING INTERFACE
+// =======================================================
+
+/*
+ * These functions perform the complete movement before
+ * returning.
+ *
+ * Do not call them from FSM::movingUpdate().
+ */
+
+// Raw encoder-count movement
+void moveXY(
+    long targetXCounts,
+    long targetYCounts
+);
+
 void moveX(long targetCounts);
 void moveY(long targetCounts);
 
-// Millimetre versions. These convert X and Y separately using the measured
-// axis scales above, then call the existing encoder-count motion functions.
-// Distances are relative to the position at which the function is called.
-void moveXYmm(float targetXmm, float targetYmm);
+
+// Calibrated millimetre movement
+void moveXYmm(
+    float targetXmm,
+    float targetYmm
+);
+
 void moveXmm(float targetMm);
 void moveYmm(float targetMm);
+
 
 #endif

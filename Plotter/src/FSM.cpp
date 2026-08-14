@@ -165,7 +165,23 @@ void FSM::homingUpdate()
 }
 
 void FSM::movingUpdate()
-{
+{   
+    // Perform one iteration of the motor controllers.
+    updateMotion();
+
+    // The physical movement successfully reached its target.
+    if (isMotionComplete())
+    {
+        processEvent(Event::MOVE_COMPLETE);
+        return;
+    }
+
+    // The movement failed to finish within the allowed time.
+    if (hasMotionTimedOut())
+    {
+        processEvent(Event::TIMEOUT);
+        return;
+    }
 }
 
 void FSM::faultUpdate()
