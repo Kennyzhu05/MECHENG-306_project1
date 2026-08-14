@@ -10,13 +10,10 @@
 // CONTROLLER SETTINGS
 // =======================================================
 
-// Position PI gains
 float KP = 0.8f;
 float KI = 0.05f;
 
-// Synchronisation gain
-// Increase slightly if the path curves.
-// Reduce if the motors oscillate or correct too aggressively.
+// Synchronisation correction
 float SYNC_KP = 0.5f;
 
 
@@ -39,7 +36,7 @@ unsigned long MOVE_TIMEOUT_MS = 8000UL;
 // =======================================================
 
 /*
- * Boundary-test averages:
+ * Measured boundary-test values:
  *
  * X movement over 220 mm:
  *
@@ -87,7 +84,8 @@ static long targetA = 0;
 static long targetB = 0;
 
 
-// Whether a target has been stored but not started
+// True after setMotionTarget...()
+// False once startMotion() consumes the target.
 static bool targetAvailable = false;
 
 
@@ -96,12 +94,12 @@ static float integralA = 0.0f;
 static float integralB = 0.0f;
 
 
-// Movement timing
+// Timing
 static unsigned long motionStartTime = 0;
 static unsigned long previousUpdateTime = 0;
 
 
-// Number of consecutive samples within tolerance
+// Number of consecutive samples inside tolerance
 static int settledCount = 0;
 
 
@@ -140,7 +138,6 @@ static long absoluteLong(long value)
 }
 
 
-// Return the intended direction of a motor target.
 static float motorDirection(long target)
 {
     if (target > 0)
@@ -157,18 +154,21 @@ static float motorDirection(long target)
 }
 
 
-// Convert controller output into signed PWM.
 static int toMotorCommand(float controllerOutput)
 {
     int pwm =
         static_cast<int>(controllerOutput);
 
     pwm =
-        clampInt(pwm, -MAX_PWM, MAX_PWM);
+        clampInt(
+            pwm,
+            -MAX_PWM,
+            MAX_PWM
+        );
 
 
-    // Ensure a non-zero command is large enough to
-    // overcome static friction.
+    // Make sure a commanded motor receives enough
+    // PWM to overcome static friction.
     if (pwm > 0 && pwm < MIN_PWM)
     {
         pwm = MIN_PWM;
@@ -182,12 +182,30 @@ static int toMotorCommand(float controllerOutput)
 }
 
 
-// Store targets that are already expressed as encoder counts.
+// =======================================================
+// STORE TARGET IN ENCODER COUNTS
+// =======================================================
+
 static void setMotionTargetCounts(
     long targetXCounts,
     long targetYCounts
 )
 {
+    /*
+     * IMPORTANT:
+     *
+     * Never change the target while a movement is active.
+     */
+    if (motionState == MotionState::ACTIVE)
+    {
+        Serial.println(
+            "WARNING: Tried to change target while motion is active."
+        );
+
+        return;
+    }
+
+
     /*
      * Plotter kinematics:
      *
@@ -196,17 +214,19 @@ static void setMotionTargetCounts(
      */
 
     targetA =
-        targetXCounts + targetYCounts;
+        targetXCounts +
+        targetYCounts;
 
     targetB =
-        targetXCounts - targetYCounts;
+        targetXCounts -
+        targetYCounts;
 
     targetAvailable = true;
 }
 
 
 // =======================================================
-// STORE A MILLIMETRE TARGET
+// STORE TARGET IN MILLIMETRES
 // =======================================================
 
 void setMotionTargetMm(
@@ -215,8 +235,20 @@ void setMotionTargetMm(
 )
 {
     /*
-     * Apply each motor's measured encoder scale separately.
-     *
+     * Do not allow the FSM or another piece of code
+     * to replace the target halfway through a move.
+     */
+    if (motionState == MotionState::ACTIVE)
+    {
+        Serial.println(
+            "WARNING: Tried to change target while motion is active."
+        );
+
+        return;
+    }
+
+
+    /*
      * Motor A:
      *
      * A = +X +Y
@@ -224,6 +256,9 @@ void setMotionTargetMm(
      * Motor B:
      *
      * B = +X -Y
+     *
+     * Each motor uses its own experimentally measured
+     * counts/mm calibration.
      */
 
     targetA = lroundf(
@@ -231,10 +266,12 @@ void setMotionTargetMm(
         targetYmm * LEFT_Y_COUNTS_PER_MM
     );
 
+
     targetB = lroundf(
         targetXmm * RIGHT_X_COUNTS_PER_MM -
         targetYmm * RIGHT_Y_COUNTS_PER_MM
     );
+
 
     targetAvailable = true;
 
@@ -264,41 +301,77 @@ void setMotionTargetMm(
 
 bool startMotion()
 {
-    if (!targetAvailable)
+    /*
+     * CRITICAL PROTECTION:
+     *
+     * If startMotion() is accidentally called repeatedly
+     * by the FSM, DO NOT reset the encoders or timer.
+     *
+     * Previously, repeatedly starting the move could make
+     * an 80 mm command effectively become:
+     *
+     *   move another 80 mm
+     *   move another 80 mm
+     *   move another 80 mm
+     *   ...
+     */
+
+    if (motionState == MotionState::ACTIVE)
     {
         Serial.println(
-            "ERROR: Cannot start motion because no target is available."
+            "WARNING: startMotion() called while motion already active."
         );
 
         return false;
     }
 
 
-    // The movement is measured relative to the
-    // current physical position.
+    if (!targetAvailable)
+    {
+        Serial.println(
+            "ERROR: Cannot start motion - no target available."
+        );
+
+        return false;
+    }
+
+
+    // Movement is relative to the current position.
     resetEncoders();
 
 
-    // Reset controller memory.
+    // Reset PI controller memory.
     integralA = 0.0f;
     integralB = 0.0f;
 
+
+    // Reset completion counter.
     settledCount = 0;
 
 
-    // Reset timing.
+    // Start timeout and controller timing.
     motionStartTime = millis();
     previousUpdateTime = motionStartTime;
 
 
-    motionState = MotionState::ACTIVE;
+    // Motion is now running.
+    motionState =
+        MotionState::ACTIVE;
 
 
-    // The target has now been consumed.
+    // The stored target has now been consumed.
     targetAvailable = false;
 
 
+    Serial.println();
     Serial.println("Motion started.");
+
+    Serial.print("Motor A target: ");
+    Serial.println(targetA);
+
+    Serial.print("Motor B target: ");
+    Serial.println(targetB);
+
 
     return true;
 }
@@ -310,16 +383,60 @@ bool startMotion()
 
 void updateMotion()
 {
-    // Nothing should be calculated unless a movement
-    // is currently active.
+    /*
+     * updateMotion() is called repeatedly by:
+     *
+     *      FSM::movingUpdate()
+     *
+     * It NEVER starts a new movement.
+     */
     if (motionState != MotionState::ACTIVE)
     {
         return;
     }
 
 
-    // Read the latest encoder values.
+    unsigned long now =
+        millis();
+
+
+    // ===================================================
+    // SAFETY TIMEOUT
+    // ===================================================
+
+    /*
+     * Check timeout BEFORE issuing another motor command.
+     *
+     * This guarantees that an active movement cannot
+     * continue beyond MOVE_TIMEOUT_MS.
+     */
+
+    if (
+        now - motionStartTime >=
+        MOVE_TIMEOUT_MS
+    )
+    {
+        stopMotors();
+
+        motionState =
+            MotionState::TIMED_OUT;
+
+
+        Serial.println();
+        Serial.println(
+            "ERROR: Motion timed out."
+        );
+
+        return;
+    }
+
+
+    // ===================================================
+    // READ ENCODERS
+    // ===================================================
+
     updateEncoders();
+
 
     long measuredA =
         getLeftEncoderCount();
@@ -336,52 +453,127 @@ void updateMotion()
         targetB - measuredB;
 
 
-    // Calculate elapsed controller time.
-    unsigned long now = millis();
+    // ===================================================
+    // COMPLETION CHECK
+    // ===================================================
+
+    bool motorAReached =
+        absoluteLong(errorA) <=
+        POSITION_TOLERANCE;
+
+    bool motorBReached =
+        absoluteLong(errorB) <=
+        POSITION_TOLERANCE;
+
+
+    if (
+        motorAReached &&
+        motorBReached
+    )
+    {
+        /*
+         * Both motors are already at the destination.
+         *
+         * Stop them immediately while checking whether
+         * they remain there for SETTLE_SAMPLES readings.
+         */
+        stopMotors();
+
+        settledCount++;
+
+
+        if (
+            settledCount >=
+            SETTLE_SAMPLES
+        )
+        {
+            motionState =
+                MotionState::COMPLETE;
+
+
+            Serial.println();
+            Serial.println(
+                "Motion complete."
+            );
+
+            Serial.print(
+                "Motor A target: "
+            );
+            Serial.println(targetA);
+
+            Serial.print(
+                "Motor A final:  "
+            );
+            Serial.println(measuredA);
+
+            Serial.print(
+                "Motor B target: "
+            );
+            Serial.println(targetB);
+
+            Serial.print(
+                "Motor B final:  "
+            );
+            Serial.println(measuredB);
+
+            return;
+        }
+
+
+        /*
+         * Do not calculate another PI output while
+         * both motors are inside the tolerance.
+         */
+        return;
+    }
+    else
+    {
+        settledCount = 0;
+    }
+
+
+    // ===================================================
+    // CONTROLLER TIME STEP
+    // ===================================================
 
     float dt =
         static_cast<float>(
-            now - previousUpdateTime
+            now -
+            previousUpdateTime
         ) / 1000.0f;
+
 
     if (dt <= 0.0f)
     {
         dt = 0.001f;
     }
 
-    previousUpdateTime = now;
+
+    previousUpdateTime =
+        now;
 
 
     // ===================================================
-    // BASIC PI POSITION CONTROL
+    // PI POSITION CONTROL
     // ===================================================
 
     float outputA =
-        KP * static_cast<float>(errorA) +
-        KI * integralA;
+        KP *
+        static_cast<float>(errorA) +
+        KI *
+        integralA;
+
 
     float outputB =
-        KP * static_cast<float>(errorB) +
-        KI * integralB;
+        KP *
+        static_cast<float>(errorB) +
+        KI *
+        integralB;
 
 
     // ===================================================
     // MOTOR SYNCHRONISATION
     // ===================================================
-
-    /*
-     * For a straight line, both motors should complete
-     * the same proportion of their total movement at
-     * approximately the same time.
-     *
-     * Example:
-     *
-     * progressA = 0.50
-     * progressB = 0.40
-     *
-     * Motor A is ahead, so the synchronisation controller
-     * reduces Motor A and increases Motor B.
-     */
 
     long targetMagnitudeA =
         absoluteLong(targetA);
@@ -390,28 +582,47 @@ void updateMotion()
         absoluteLong(targetB);
 
 
-    // Synchronisation requires both motors to have
-    // meaningful non-zero movement targets.
-    if (targetMagnitudeA > POSITION_TOLERANCE &&
-        targetMagnitudeB > POSITION_TOLERANCE)
+    /*
+     * Synchronisation only makes sense when both motors
+     * have significant non-zero movement.
+     */
+
+    if (
+        targetMagnitudeA >
+            POSITION_TOLERANCE &&
+        targetMagnitudeB >
+            POSITION_TOLERANCE
+    )
     {
         float progressA =
-            static_cast<float>(measuredA) /
-            static_cast<float>(targetA);
+            static_cast<float>(
+                measuredA
+            ) /
+            static_cast<float>(
+                targetA
+            );
+
 
         float progressB =
-            static_cast<float>(measuredB) /
-            static_cast<float>(targetB);
+            static_cast<float>(
+                measuredB
+            ) /
+            static_cast<float>(
+                targetB
+            );
 
 
         float progressDifference =
-            progressA - progressB;
+            progressA -
+            progressB;
 
 
         long smallerTargetMagnitude;
 
-        if (targetMagnitudeA <
-            targetMagnitudeB)
+        if (
+            targetMagnitudeA <
+            targetMagnitudeB
+        )
         {
             smallerTargetMagnitude =
                 targetMagnitudeA;
@@ -423,8 +634,6 @@ void updateMotion()
         }
 
 
-        // Convert the proportional progress error into
-        // an approximate encoder-count error.
         float synchronisationError =
             progressDifference *
             static_cast<float>(
@@ -438,18 +647,18 @@ void updateMotion()
 
 
         /*
-         * If Motor A is ahead:
+         * If A is ahead:
          *
-         * - reduce A in its movement direction;
-         * - increase B in its movement direction.
+         * reduce A and increase B.
          *
-         * motorDirection() also handles movements where
-         * one or both targets are negative.
+         * motorDirection() makes this work for
+         * positive and negative movements.
          */
 
         outputA -=
             motorDirection(targetA) *
             synchronisationOutput;
+
 
         outputB +=
             motorDirection(targetB) *
@@ -461,28 +670,50 @@ void updateMotion()
     // ANTI-WINDUP
     // ===================================================
 
-    bool saturatedPositiveA = outputA > MAX_PWM && errorA > 0;
-    bool saturatedNegativeA = outputA < -MAX_PWM && errorA < 0;
-    bool parkedA = absoluteLong(errorA) <= POSITION_TOLERANCE;
+    bool saturatedPositiveA =
+        outputA > MAX_PWM &&
+        errorA > 0;
 
-    if (!saturatedPositiveA && !saturatedNegativeA && !parkedA)
+    bool saturatedNegativeA =
+        outputA < -MAX_PWM &&
+        errorA < 0;
+
+
+    if (
+        !saturatedPositiveA &&
+        !saturatedNegativeA
+    )
     {
-        integralA += static_cast<float>(errorA) * dt;
+        integralA +=
+            static_cast<float>(
+                errorA
+            ) * dt;
     }
 
 
-    bool saturatedPositiveB = outputB > MAX_PWM && errorB > 0;
-    bool saturatedNegativeB = outputB < -MAX_PWM && errorB < 0;
-    bool parkedB = absoluteLong(errorB) <= POSITION_TOLERANCE;
+    bool saturatedPositiveB =
+        outputB > MAX_PWM &&
+        errorB > 0;
 
-    if (!saturatedPositiveB && !saturatedNegativeB && !parkedB)
+    bool saturatedNegativeB =
+        outputB < -MAX_PWM &&
+        errorB < 0;
+
+
+    if (
+        !saturatedPositiveB &&
+        !saturatedNegativeB
+    )
     {
-        integralB += static_cast<float>(errorB) * dt;
+        integralB +=
+            static_cast<float>(
+                errorB
+            ) * dt;
     }
 
 
     // ===================================================
-    // CONVERT OUTPUTS TO PWM
+    // CONVERT TO PWM
     // ===================================================
 
     int pwmA =
@@ -492,16 +723,17 @@ void updateMotion()
         toMotorCommand(outputB);
 
 
-    // Stop controlling a motor once it is within its
-    // final encoder-count tolerance.
-    if (absoluteLong(errorA) <=
-        POSITION_TOLERANCE)
+    /*
+     * If one motor has reached its final position,
+     * stop that motor while the other finishes.
+     */
+
+    if (motorAReached)
     {
         pwmA = 0;
     }
 
-    if (absoluteLong(errorB) <=
-        POSITION_TOLERANCE)
+    if (motorBReached)
     {
         pwmB = 0;
     }
@@ -509,81 +741,6 @@ void updateMotion()
 
     driveMotorA(pwmA);
     driveMotorB(pwmB);
-
-
-    // ===================================================
-    // COMPLETION CHECK
-    // ===================================================
-
-    if (absoluteLong(errorA) <=
-            POSITION_TOLERANCE &&
-        absoluteLong(errorB) <=
-            POSITION_TOLERANCE)
-    {
-        settledCount++;
-
-
-        // Require several consecutive successful readings.
-        if (settledCount >= SETTLE_SAMPLES)
-        {
-            stopMotors();
-
-            motionState =
-                MotionState::COMPLETE;
-
-
-            Serial.println();
-            Serial.println("Motion complete.");
-
-            Serial.print("Motor A target: ");
-            Serial.println(targetA);
-
-            Serial.print("Motor A final:  ");
-            Serial.println(measuredA);
-
-            Serial.print("Motor B target: ");
-            Serial.println(targetB);
-
-            Serial.print("Motor B final:  ");
-            Serial.println(measuredB);
-
-            return;
-        }
-    }
-    else
-    {
-        settledCount = 0;
-    }
-
-
-    // ===================================================
-    // TIMEOUT CHECK
-    // ===================================================
-
-    if (now - motionStartTime >=
-        MOVE_TIMEOUT_MS)
-    {
-        stopMotors();
-
-        motionState =
-            MotionState::TIMED_OUT;
-
-
-        Serial.println();
-        Serial.println("ERROR: Motion timed out.");
-
-        Serial.print("Motor A target: ");
-        Serial.println(targetA);
-
-        Serial.print("Motor A final:  ");
-        Serial.println(measuredA);
-
-        Serial.print("Motor B target: ");
-        Serial.println(targetB);
-
-        Serial.print("Motor B final:  ");
-        Serial.println(measuredB);
-    }
 }
 
 
@@ -591,24 +748,27 @@ void updateMotion()
 // MOTION STATUS
 // =======================================================
 
+bool isMotionActive()
+{
+    return
+        motionState ==
+        MotionState::ACTIVE;
+}
+
+
 bool isMotionComplete()
 {
-    return motionState ==
-           MotionState::COMPLETE;
+    return
+        motionState ==
+        MotionState::COMPLETE;
 }
 
 
 bool hasMotionTimedOut()
 {
-    return motionState ==
-           MotionState::TIMED_OUT;
-}
-
-
-bool isMotionActive()
-{
-    return motionState ==
-           MotionState::ACTIVE;
+    return
+        motionState ==
+        MotionState::TIMED_OUT;
 }
 
 
@@ -620,15 +780,24 @@ void resetMotion()
 {
     stopMotors();
 
+
     integralA = 0.0f;
     integralB = 0.0f;
 
+
     settledCount = 0;
+
 
     targetA = 0;
     targetB = 0;
 
+
     targetAvailable = false;
+
+
+    motionStartTime = 0;
+    previousUpdateTime = 0;
+
 
     motionState =
         MotionState::IDLE;
@@ -641,18 +810,13 @@ void resetMotion()
 
 long xMmToCounts(float distanceMm)
 {
-    /*
-     * This returns an average Cartesian count value.
-     * The calibrated millimetre interface below applies
-     * the individual motor scales instead.
-     */
-
     float averageXCountsPerMm =
         0.5f *
         (
             LEFT_X_COUNTS_PER_MM +
             RIGHT_X_COUNTS_PER_MM
         );
+
 
     return lroundf(
         distanceMm *
@@ -670,6 +834,7 @@ long yMmToCounts(float distanceMm)
             RIGHT_Y_COUNTS_PER_MM
         );
 
+
     return lroundf(
         distanceMm *
         averageYCountsPerMm
@@ -678,21 +843,21 @@ long yMmToCounts(float distanceMm)
 
 
 // =======================================================
-// LEGACY BLOCKING FUNCTIONS
+// BLOCKING TEST FUNCTIONS
 // =======================================================
 
 /*
- * These functions are kept so older testing code still
- * compiles.
+ * These functions are useful for simple hardware tests.
  *
- * Do not call them from FSM::movingUpdate(), because they
- * wait inside a while loop.
+ * DO NOT use these functions from FSM::movingUpdate().
  *
- * The FSM must instead use:
+ * The FSM must use:
  *
- * setMotionTargetMm()
- * startMotion()
- * updateMotion()
+ *      setMotionTargetMm()
+ *      startMotion()
+ *      updateMotion()
+ *
+ * separately.
  */
 
 void moveXY(
@@ -700,6 +865,16 @@ void moveXY(
     long targetYCounts
 )
 {
+    if (isMotionActive())
+    {
+        Serial.println(
+            "ERROR: Cannot start blocking move - another move is active."
+        );
+
+        return;
+    }
+
+
     setMotionTargetCounts(
         targetXCounts,
         targetYCounts
@@ -715,19 +890,28 @@ void moveXY(
     while (isMotionActive())
     {
         updateMotion();
+
+        // Prevent an unnecessarily tight busy loop.
+        delay(1);
     }
 }
 
 
 void moveX(long targetCounts)
 {
-    moveXY(targetCounts, 0);
+    moveXY(
+        targetCounts,
+        0
+    );
 }
 
 
 void moveY(long targetCounts)
 {
-    moveXY(0, targetCounts);
+    moveXY(
+        0,
+        targetCounts
+    );
 }
 
 
@@ -736,6 +920,16 @@ void moveXYmm(
     float targetYmm
 )
 {
+    if (isMotionActive())
+    {
+        Serial.println(
+            "ERROR: Cannot start blocking move - another move is active."
+        );
+
+        return;
+    }
+
+
     setMotionTargetMm(
         targetXmm,
         targetYmm
@@ -751,17 +945,25 @@ void moveXYmm(
     while (isMotionActive())
     {
         updateMotion();
+
+        delay(1);
     }
 }
 
 
 void moveXmm(float targetMm)
 {
-    moveXYmm(targetMm, 0.0f);
+    moveXYmm(
+        targetMm,
+        0.0f
+    );
 }
 
 
 void moveYmm(float targetMm)
 {
-    moveXYmm(0.0f, targetMm);
+    moveXYmm(
+        0.0f,
+        targetMm
+    );
 }
