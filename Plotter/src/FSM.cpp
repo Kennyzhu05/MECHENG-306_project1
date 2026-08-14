@@ -1,5 +1,6 @@
 #include "FSM.h"
 #include "Homing.h"
+#include "Motion.h"
 
 // Start with initialzing state
 FSM::FSM()
