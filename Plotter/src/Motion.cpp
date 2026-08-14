@@ -1,63 +1,111 @@
 #include <Arduino.h>
 #include <math.h>
+
 #include "Motion.h"
 #include "Motor.h"
 #include "Encoder.h"
 
-// ---- Tunable PI gains and limits ----
-float KP = 0.8;
-float KI = 0.05;
 
-int MIN_PWM = 60;      // below this, motors may not overcome static friction
+// =======================================================
+// PI CONTROL SETTINGS
+// =======================================================
+
+float KP = 0.8f;
+float KI = 0.05f;
+
+// Corrects one motor when its proportional progress is ahead
+// of the other motor. Start conservatively and tune experimentally.
+float SYNC_KP = 0.5f;
+
+int MIN_PWM = 60;
 int MAX_PWM = 255;
 
-long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
-int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
+long POSITION_TOLERANCE = 5;
+int SETTLE_SAMPLES = 5;
 
-unsigned long MOVE_TIMEOUT_MS = 8000;   // safety cutoff
-
-// ---- Encoder calibration from five boundary-test runs ----
-// X movement:
-//   mean left count  = 20276.4
-//   mean right count = 19807.8
-//   Cartesian X count = (20276.4 + 19807.8) / 2 = 20042.1
-//   X_COUNTS_PER_MM = 20042.1 / 220 mm
-//
-// Y movement:
-//   mean left count  = 12393.6
-//   mean right count = -12285.6
-//   Cartesian Y count = (12393.6 - (-12285.6)) / 2 = 12339.6
-//   Y_COUNTS_PER_MM = 12339.6 / 130 mm
-const float X_COUNTS_PER_MM = 20042.1f / 220.0f;
-const float Y_COUNTS_PER_MM = 12339.6f / 130.0f;
+unsigned long MOVE_TIMEOUT_MS = 8000;
 
 
-long xMmToCounts(float distanceMm)
+// =======================================================
+// INDIVIDUAL MOTOR CALIBRATION
+// =======================================================
+
+/*
+ * Boundary-test results:
+ *
+ * Rightward movement over 220 mm:
+ * Left motor  = 20276.4 counts
+ * Right motor = 19807.8 counts
+ *
+ * Upward movement over 130 mm:
+ * Left motor  = 12393.6 counts
+ * Right motor = -12285.6 counts
+ */
+
+const float LEFT_X_COUNTS_PER_MM =
+    20276.4f / 220.0f;
+
+const float RIGHT_X_COUNTS_PER_MM =
+    19807.8f / 220.0f;
+
+const float LEFT_Y_COUNTS_PER_MM =
+    12393.6f / 130.0f;
+
+const float RIGHT_Y_COUNTS_PER_MM =
+    12285.6f / 130.0f;
+
+
+// =======================================================
+// HELPER FUNCTIONS
+// =======================================================
+
+static int clampInt(int value, int minimum, int maximum)
 {
-    return lroundf(distanceMm * X_COUNTS_PER_MM);
-}
+    if (value < minimum)
+    {
+        return minimum;
+    }
 
+    if (value > maximum)
+    {
+        return maximum;
+    }
 
-long yMmToCounts(float distanceMm)
-{
-    return lroundf(distanceMm * Y_COUNTS_PER_MM);
-}
-
-
-static int clampInt(int value, int lo, int hi)
-{
-    if (value < lo) return lo;
-    if (value > hi) return hi;
     return value;
 }
 
 
-// Converts a raw PI output into a signed PWM command: capped at
-// MAX_PWM, and bumped up to MIN_PWM if it's small-but-nonzero so the
-// motor doesn't stall in the "should be moving but isn't" zone.
-static int toMotorCommand(float piOutput)
+static long absoluteLong(long value)
 {
-    int pwm = (int)piOutput;
+    if (value < 0)
+    {
+        return -value;
+    }
+
+    return value;
+}
+
+
+static float motorDirection(long target)
+{
+    if (target > 0)
+    {
+        return 1.0f;
+    }
+
+    if (target < 0)
+    {
+        return -1.0f;
+    }
+
+    return 0.0f;
+}
+
+
+static int toMotorCommand(float controllerOutput)
+{
+    int pwm = static_cast<int>(controllerOutput);
+
     pwm = clampInt(pwm, -MAX_PWM, MAX_PWM);
 
     if (pwm > 0 && pwm < MIN_PWM)
@@ -73,68 +121,199 @@ static int toMotorCommand(float piOutput)
 }
 
 
-void moveXY(long targetXCounts, long targetYCounts)
-{
-    // Kinematics: convert the desired X/Y move into per-motor targets
-    long targetA = targetXCounts + targetYCounts;
-    long targetB = targetXCounts - targetYCounts;
+// =======================================================
+// CLOSED-LOOP MOTOR MOVEMENT
+// =======================================================
 
+static void moveMotorTargets(
+    long targetA,
+    long targetB
+)
+{
     resetEncoders();
 
-    float integralA = 0;
-    float integralB = 0;
+    float integralA = 0.0f;
+    float integralB = 0.0f;
 
     unsigned long startTime = millis();
     unsigned long lastTime = startTime;
 
     int settledCount = 0;
+    bool timedOut = false;
 
     while (true)
     {
         updateEncoders();
 
+        long measuredA = getLeftEncoderCount();
+        long measuredB = getRightEncoderCount();
+
+        long errorA = targetA - measuredA;
+        long errorB = targetB - measuredB;
+
         unsigned long now = millis();
-        float dt = (now - lastTime) / 1000.0;
-        if (dt <= 0) dt = 0.001;   // guard against a zero dt on fast loops
+
+        float dt =
+            static_cast<float>(now - lastTime) / 1000.0f;
+
+        if (dt <= 0.0f)
+        {
+            dt = 0.001f;
+        }
+
         lastTime = now;
 
-        long errorA = targetA - getLeftEncoderCount();
-        long errorB = targetB - getRightEncoderCount();
 
-        // --- Motor A ---
-        float outputA = KP * errorA + KI * integralA;
+        // -----------------------------------------------
+        // Normal PI position control
+        // -----------------------------------------------
+
+        float outputA =
+            KP * static_cast<float>(errorA) +
+            KI * integralA;
+
+        float outputB =
+            KP * static_cast<float>(errorB) +
+            KI * integralB;
+
+
+        // -----------------------------------------------
+        // Coordinated-motion synchronization
+        // -----------------------------------------------
+
+        /*
+         * For a straight path, both motors should complete
+         * the same proportion of their movements at the
+         * same time.
+         *
+         * For example:
+         *
+         * progressA = 0.50
+         * progressB = 0.45
+         *
+         * means Motor A is ahead of Motor B.
+         */
+
+        long targetMagnitudeA = absoluteLong(targetA);
+        long targetMagnitudeB = absoluteLong(targetB);
+
+        if (targetMagnitudeA > POSITION_TOLERANCE &&
+            targetMagnitudeB > POSITION_TOLERANCE)
+        {
+            float progressA =
+                static_cast<float>(measuredA) /
+                static_cast<float>(targetA);
+
+            float progressB =
+                static_cast<float>(measuredB) /
+                static_cast<float>(targetB);
+
+            float progressDifference =
+                progressA - progressB;
+
+            long smallerTargetMagnitude;
+
+            if (targetMagnitudeA < targetMagnitudeB)
+            {
+                smallerTargetMagnitude = targetMagnitudeA;
+            }
+            else
+            {
+                smallerTargetMagnitude = targetMagnitudeB;
+            }
+
+            /*
+             * Convert the normalized progress difference
+             * into an approximate count difference.
+             */
+            float synchronizationErrorCounts =
+                progressDifference *
+                static_cast<float>(smallerTargetMagnitude);
+
+            float synchronizationOutput =
+                SYNC_KP * synchronizationErrorCounts;
+
+            /*
+             * If A is ahead:
+             *
+             * - reduce A in its movement direction;
+             * - increase B in its movement direction.
+             *
+             * motorDirection() makes this work even when
+             * one motor has a negative target.
+             */
+            outputA -=
+                motorDirection(targetA) *
+                synchronizationOutput;
+
+            outputB +=
+                motorDirection(targetB) *
+                synchronizationOutput;
+        }
+
+
+        // -----------------------------------------------
+        // Anti-windup
+        // -----------------------------------------------
+
+        bool saturatedPositiveA =
+            outputA > MAX_PWM && errorA > 0;
+
+        bool saturatedNegativeA =
+            outputA < -MAX_PWM && errorA < 0;
+
+        if (!saturatedPositiveA &&
+            !saturatedNegativeA)
+        {
+            integralA +=
+                static_cast<float>(errorA) * dt;
+        }
+
+
+        bool saturatedPositiveB =
+            outputB > MAX_PWM && errorB > 0;
+
+        bool saturatedNegativeB =
+            outputB < -MAX_PWM && errorB < 0;
+
+        if (!saturatedPositiveB &&
+            !saturatedNegativeB)
+        {
+            integralB +=
+                static_cast<float>(errorB) * dt;
+        }
+
+
+        // -----------------------------------------------
+        // Convert controller outputs into PWM
+        // -----------------------------------------------
+
         int pwmA = toMotorCommand(outputA);
-        // Anti-windup: don't keep integrating error in the direction
-        // that's already saturating the output
-        bool satPosA = (outputA > MAX_PWM && errorA > 0);
-        bool satNegA = (outputA < -MAX_PWM && errorA < 0);
-        if (!satPosA && !satNegA)
-        {
-            integralA += errorA * dt;
-        }
-
-        // --- Motor B ---
-        float outputB = KP * errorB + KI * integralB;
         int pwmB = toMotorCommand(outputB);
-        bool satPosB = (outputB > MAX_PWM && errorB > 0);
-        bool satNegB = (outputB < -MAX_PWM && errorB < 0);
-        if (!satPosB && !satNegB)
+
+        if (absoluteLong(errorA) <= POSITION_TOLERANCE)
         {
-            integralB += errorB * dt;
+            pwmA = 0;
         }
 
-        // Once a motor is within tolerance, stop driving it so it
-        // doesn't hunt back and forth while the other axis finishes
-        if (abs(errorA) <= POSITION_TOLERANCE) pwmA = 0;
-        if (abs(errorB) <= POSITION_TOLERANCE) pwmB = 0;
+        if (absoluteLong(errorB) <= POSITION_TOLERANCE)
+        {
+            pwmB = 0;
+        }
 
         driveMotorA(pwmA);
         driveMotorB(pwmB);
 
-        // Both motors settled -> done
-        if (abs(errorA) <= POSITION_TOLERANCE && abs(errorB) <= POSITION_TOLERANCE)
+
+        // -----------------------------------------------
+        // Completion check
+        // -----------------------------------------------
+
+        if (absoluteLong(errorA) <= POSITION_TOLERANCE &&
+            absoluteLong(errorB) <= POSITION_TOLERANCE)
         {
             settledCount++;
+
             if (settledCount >= SETTLE_SAMPLES)
             {
                 break;
@@ -145,14 +324,69 @@ void moveXY(long targetXCounts, long targetYCounts)
             settledCount = 0;
         }
 
+
+        // -----------------------------------------------
+        // Safety timeout
+        // -----------------------------------------------
+
         if (now - startTime >= MOVE_TIMEOUT_MS)
         {
-            // Safety timeout: stall, disconnected encoder, etc.
+            timedOut = true;
             break;
         }
     }
 
     stopMotors();
+
+    updateEncoders();
+
+    Serial.println();
+    Serial.println("Movement finished.");
+
+    Serial.print("Target A: ");
+    Serial.println(targetA);
+
+    Serial.print("Final A:  ");
+    Serial.println(getLeftEncoderCount());
+
+    Serial.print("Target B: ");
+    Serial.println(targetB);
+
+    Serial.print("Final B:  ");
+    Serial.println(getRightEncoderCount());
+
+    if (timedOut)
+    {
+        Serial.println("WARNING: Movement timed out.");
+    }
+}
+
+
+// =======================================================
+// RAW ENCODER-COUNT INTERFACE
+// =======================================================
+
+void moveXY(
+    long targetXCounts,
+    long targetYCounts
+)
+{
+    /*
+     * Ideal kinematic conversion:
+     *
+     * A = X + Y
+     * B = X - Y
+     *
+     * This function assumes X and Y have already been
+     * expressed using a common encoder-count scale.
+     */
+    long targetA =
+        targetXCounts + targetYCounts;
+
+    long targetB =
+        targetXCounts - targetYCounts;
+
+    moveMotorTargets(targetA, targetB);
 }
 
 
@@ -168,12 +402,37 @@ void moveY(long targetCounts)
 }
 
 
-void moveXYmm(float targetXmm, float targetYmm)
-{
-    long targetXCounts = xMmToCounts(targetXmm);
-    long targetYCounts = yMmToCounts(targetYmm);
+// =======================================================
+// CALIBRATED MILLIMETRE INTERFACE
+// =======================================================
 
-    moveXY(targetXCounts, targetYCounts);
+void moveXYmm(
+    float targetXmm,
+    float targetYmm
+)
+{
+    /*
+     * Apply the experimentally measured scale separately
+     * to each motor.
+     *
+     * Motor A:
+     * A = +X +Y
+     *
+     * Motor B:
+     * B = +X -Y
+     */
+
+    long targetA = lroundf(
+        targetXmm * LEFT_X_COUNTS_PER_MM +
+        targetYmm * LEFT_Y_COUNTS_PER_MM
+    );
+
+    long targetB = lroundf(
+        targetXmm * RIGHT_X_COUNTS_PER_MM -
+        targetYmm * RIGHT_Y_COUNTS_PER_MM
+    );
+
+    moveMotorTargets(targetA, targetB);
 }
 
 
