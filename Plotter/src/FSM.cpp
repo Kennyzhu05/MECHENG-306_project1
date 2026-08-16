@@ -157,7 +157,7 @@ void FSM::exitState(State state)
             // Make sure motors are stopped and
             // the motion controller is reset when
             // leaving the MOVING state.
-            resetMotion();
+            abortMotion();
 
             break;
 
@@ -196,7 +196,7 @@ void FSM::movingUpdate()
 
     // If the requested position has been reached,
     // return to IDLE.
-    if (isMotionComplete())
+    if (isMotionDone())
     {
         processEvent(Event::MOVE_COMPLETE);
         return;
@@ -204,7 +204,7 @@ void FSM::movingUpdate()
 
     // If the movement takes too long,
     // move the FSM into FAULT.
-    if (hasMotionTimedOut())
+    if (isMotionTimedOut())
     {
         processEvent(Event::TIMEOUT);
         return;
@@ -269,10 +269,10 @@ void FSM::processEvent(Event event)
                  * It is NOT called repeatedly inside
                  * movingUpdate().
                  */
-                if (!startMotion())
-                {
-                    processEvent(Event::TIMEOUT);
-                }
+                // if (!startMotion())
+                // {
+                //     processEvent(Event::TIMEOUT);
+                // }
             }
 
             else if (event == Event::LIMIT_TRIGGERED)

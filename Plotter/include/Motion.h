@@ -1,115 +1,56 @@
 #ifndef MOTION_H
 #define MOTION_H
 
+#include <Arduino.h>
 
-// =======================================================
-// CONTROLLER SETTINGS
-// =======================================================
-
+// ---- Tunable PI gains and limits (still adjustable at runtime) ----
 extern float KP;
 extern float KI;
-
-// Synchronisation gain used to keep both motors coordinated.
-extern float SYNC_KP;
-
-
-// =======================================================
-// PWM LIMITS
-// =======================================================
-
 extern int MIN_PWM;
 extern int MAX_PWM;
-
-
-// =======================================================
-// STOPPING CONDITIONS
-// =======================================================
-
 extern long POSITION_TOLERANCE;
 extern int SETTLE_SAMPLES;
-
-
-// =======================================================
-// SAFETY
-// =======================================================
-
 extern unsigned long MOVE_TIMEOUT_MS;
 
+// Result of the most recently completed move, so the FSM can tell a
+// clean settle apart from a safety timeout.
+enum class MotionResult
+{
+    NONE,       // no move has completed yet since startMotion()
+    SETTLED,    // both axes reached tolerance and stayed there
+    TIMED_OUT   // safety cutoff hit before settling
+};
 
-// =======================================================
-// ENCODER CALIBRATION
-// =======================================================
+// Begin a new move to the given target encoder counts (X/Y space).
+// Resets encoders, integrators, timers, and the settle counter.
+void startMotion(long targetXCounts, long targetYCounts);
 
-extern const float X_COUNTS_PER_MM;
-extern const float Y_COUNTS_PER_MM;
-
-
-// Convert Cartesian millimetres into average encoder counts.
-long xMmToCounts(float distanceMm);
-long yMmToCounts(float distanceMm);
-
-
-// =======================================================
-// NON-BLOCKING FSM MOTION INTERFACE
-// =======================================================
-
-// Store a relative XY target in millimetres.
-// This function stores the target but does not start movement.
-void setMotionTargetMm(
-    float targetXmm,
-    float targetYmm
-);
-
-
-// Start the previously stored target.
-// Returns false if no target has been stored.
-bool startMotion();
-
-
-// Perform one iteration of encoder reading and PI control.
-// Call this repeatedly from FSM::movingUpdate().
+// Call this every loop() iteration. Does ONE PI update tick if a
+// motion is active; does nothing if idle. Non-blocking.
 void updateMotion();
 
+// True once updateMotion() has settled or timed out (i.e. motors
+// are no longer being actively driven toward a target).
+bool isMotionDone();
 
-// Motion status functions
+// True while a motion is actively running (equivalent to !isMotionDone()
+// but reads more naturally from FSM code, e.g. isBusy()).
 bool isMotionActive();
-bool isMotionComplete();
-bool hasMotionTimedOut();
 
+// True if the current motion has exceeded the safety timeout.
+bool isMotionTimedOut();
 
-// Stop the motors and reset the motion controller.
-void resetMotion();
+// Why the last motion ended. Valid once isMotionDone() is true.
+MotionResult getLastMotionResult();
 
+// Immediately halts any active motion and stops the motors.
+// Use for e-stop / limit-switch triggers, not for normal completion.
+void abortMotion();
 
-// =======================================================
-// LEGACY BLOCKING INTERFACE
-// =======================================================
-
-/*
- * These functions perform the complete movement before
- * returning.
- *
- * Do not call them from FSM::movingUpdate().
- */
-
-// Raw encoder-count movement
-void moveXY(
-    long targetXCounts,
-    long targetYCounts
-);
-
+// Blocking convenience wrapper kept for standalone bench testing
+// (bypasses the FSM). Internally just spins calling updateMotion().
+void moveXY(long targetXCounts, long targetYCounts);
 void moveX(long targetCounts);
 void moveY(long targetCounts);
-
-
-// Calibrated millimetre movement
-void moveXYmm(
-    float targetXmm,
-    float targetYmm
-);
-
-void moveXmm(float targetMm);
-void moveYmm(float targetMm);
-
 
 #endif
