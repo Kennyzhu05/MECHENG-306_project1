@@ -193,7 +193,99 @@ void FSM::homingUpdate()
 }
 
 void FSM::movingUpdate()
-{
+{   
+    // The following section of the code is responsible to check whether
+    // the previous pressed switch has been released
+
+    // Always refresh the physical switch states first
+    updateLimitSwitches();
+
+
+    // =================================================
+    // 1. RE-ARM switches that were active at move start
+    // This means: now the switch is released, meaning that
+    // the plotter has left the starting point where the switch
+    // was pressed. So if the switch is triggered, it is
+    // indicating an error. 
+    // =================================================
+    //
+    // start_____LimitActive == true means:
+    // "This switch was already pressed when motion began,
+    //  so ignore it until it gets released."
+    //
+    // Once released, set the flag false.
+    // From then on it is armed again.
+
+    if (startLeftLimitActive && !leftLimitReached())
+    {
+        startLeftLimitActive = false;
+        Serial.println("LEFT limit re-armed");
+    }
+
+    if (startRightLimitActive && !rightLimitReached())
+    {
+        startRightLimitActive = false;
+        Serial.println("RIGHT limit re-armed");
+    }
+
+     if (startBottomLimitActive && !bottomLimitReached())
+    {
+        startBottomLimitActive = false;
+        Serial.println("BOTTOM limit re-armed");
+    }
+
+    if (startTopLimitActive && !topLimitReached())
+    {
+        startTopLimitActive = false;
+        Serial.println("TOP limit re-armed");
+    }
+
+    // =================================================
+    // 2. Check all ARMED switches
+    // =================================================
+    //
+    // If:
+    //      switch is physically pressed
+    // AND
+    //      it is NOT one of the initially ignored switches
+    //
+    // then this is a new limit hit -> FAULT.
+
+    if (leftLimitReached() && !startLeftLimitActive)
+    {
+        Serial.println("FAULT: LEFT limit triggered");
+
+        processEvent(Event::LIMIT_TRIGGERED);
+        return;
+    }
+
+    if (rightLimitReached() && !startRightLimitActive)
+    {
+        Serial.println("FAULT: RIGHT limit triggered");
+
+        processEvent(Event::LIMIT_TRIGGERED);
+        return;
+    }
+
+    if (bottomLimitReached() && !startBottomLimitActive)
+    {
+        Serial.println("FAULT: BOTTOM limit triggered");
+
+        processEvent(Event::LIMIT_TRIGGERED);
+        return;
+    }
+
+    if (topLimitReached() && !startTopLimitActive)
+    {
+        Serial.println("FAULT: TOP limit triggered");
+
+        processEvent(Event::LIMIT_TRIGGERED);
+        return;
+    }
+
+    // =================================================
+    // 3. No limit fault -> continue normal motion
+    // =================================================
     // Continue the movement that was started
     // when G1_RECEIVED was processed.
     updateMotion();
@@ -258,7 +350,53 @@ void FSM::processEvent(Event event)
             {
                 long targetX = gcodeParser.getTargetX();
                 long targetY = gcodeParser.getTargetY();
+                            
+                            // Make sure we are checking the latest switch states
+                updateLimitSwitches();
 
+                // -------------------------------------------------
+                // Do not allow motion further into a pressed limit
+                // -------------------------------------------------
+
+                // Left limit already pressed -> cannot move left
+                if (leftLimitReached() && targetX < 0)
+                {
+                    Serial.println("G1 rejected: LEFT limit already reached");
+                    return;
+                }
+
+                // Right limit already pressed -> cannot move right
+                if (rightLimitReached() && targetX > 0)
+                {
+                    Serial.println("G1 rejected: RIGHT limit already reached");
+                    return;
+                }
+
+                // Bottom limit already pressed -> cannot move down
+                if (bottomLimitReached() && targetY < 0)
+                {
+                    Serial.println("G1 rejected: BOTTOM limit already reached");
+                    return;
+                }
+
+                // Top limit already pressed -> cannot move up
+                if (topLimitReached() && targetY > 0)
+                {
+                    Serial.println("G1 rejected: TOP limit already reached");
+                    return;
+                }
+                
+                // ----------------------------------------
+                // Record if the switches are triggered BEFORE movement
+                // ----------------------------------------
+
+                startTopLimitActive = topLimitReached();
+                startBottomLimitActive = bottomLimitReached();
+                startLeftLimitActive = leftLimitReached();
+                startRightLimitActive = rightLimitReached();
+
+                // If none of the above unsafe cases occurred,
+                // the movement is allowed.
                 changeState(State::MOVING);
 
                 startMotion(mmToXCounts(targetX), mmToYCounts(targetY));

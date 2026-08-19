@@ -64,7 +64,11 @@ private:
     // Event processing
     //--------------------------------
 
-   
+    // Store the initial states of the switches before it starts moving
+    bool startTopLimitActive = false;
+    bool startBottomLimitActive = false;
+    bool startLeftLimitActive = false;
+    bool startRightLimitActive = false;
 };
 
 extern FSM fsm;
