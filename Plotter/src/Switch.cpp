@@ -38,10 +38,10 @@ void updateLimitSwitches()
     // {
     //     fsm.processEvent(Event::LIMIT_TRIGGERED);
     // }
-    if (topRightReached())
-    {
-        fsm.processEvent(Event::HOMING_ERROR);
-    }
+    // if (topRightReached())
+    // {
+    //     fsm.processEvent(Event::HOMING_ERROR);
+    // }
 }
 
 
