@@ -1,6 +1,10 @@
 #include "FSM.h"
 #include "Homing.h"
 #include "Motion.h"
+#include "Motor.h"
+#include "Switch.h"
+#include "GcodeParser.h"
+#include "Helper.h"
 
 // Start with initialzing state
 FSM::FSM()
@@ -213,6 +217,8 @@ void FSM::movingUpdate()
 
 void FSM::faultUpdate()
 {
+    stopMotors();
+    updateLimitSwitches();
 }
 
 
@@ -250,35 +256,18 @@ void FSM::processEvent(Event event)
 
             else if(event == Event::G1_RECEIVED)
             {
-                /*
-                 * The target should already have been stored
-                 * using something such as:
-                 *
-                 * setMotionTargetMm(80.0f, 0.0f);
-                 *
-                 * before G1_RECEIVED is sent.
-                 */
+                long targetX = gcodeParser.getTargetX();
+                long targetY = gcodeParser.getTargetY();
 
                 changeState(State::MOVING);
 
-                /*
-                 * IMPORTANT:
-                 *
-                 * startMotion() is called ONCE here.
-                 *
-                 * It is NOT called repeatedly inside
-                 * movingUpdate().
-                 */
-                // if (!startMotion())
-                // {
-                //     processEvent(Event::TIMEOUT);
-                // }
+                startMotion(mmToXCounts(targetX), mmToYCounts(targetY));
             }
 
-            else if (event == Event::LIMIT_TRIGGERED)
-            {
-                changeState(State::FAULT);
-            }
+            // else if (event == Event::LIMIT_TRIGGERED)
+            // {
+            //     changeState(State::FAULT);
+            // }
 
             break;
 
@@ -290,7 +279,7 @@ void FSM::processEvent(Event event)
                 changeState(State::IDLE);
             }
 
-            else if(event == Event::LIMIT_TRIGGERED)
+            else if(event == Event::HOMING_ERROR)
             {
                 changeState(State::FAULT);
             }

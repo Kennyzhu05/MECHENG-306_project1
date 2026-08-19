@@ -67,4 +67,6 @@ private:
    
 };
 
+extern FSM fsm;
+
 #endif

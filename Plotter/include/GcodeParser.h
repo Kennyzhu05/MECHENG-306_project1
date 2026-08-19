@@ -133,4 +133,6 @@ private:
     );
 };
 
+extern GCodeParser gcodeParser;
+
 #endif

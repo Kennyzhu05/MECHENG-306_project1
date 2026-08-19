@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "FSM.h"
 
 // Setup
 void setupSwitches();
@@ -22,6 +23,7 @@ bool canMoveLeft();
 
 // General status
 bool anyLimitReached();
+bool topRightReached();
 bool homeReached();
 
 // Debugging

@@ -18,6 +18,7 @@ enum class Event
     MOVE_COMPLETE,
 
     // Faults
+    HOMING_ERROR,
     LIMIT_TRIGGERED,
     ENCODER_ERROR,
     TIMEOUT, 

@@ -4,10 +4,10 @@
 #include "Encoder.h"
 
 // ---- Tunable PI gains and limits ----
-float KP = 0.8;
+float KP = 0.9; // previous 0.7
 float KI = 0.05;
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
-int MAX_PWM = 255;
+int MAX_PWM = 230;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
 int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
 unsigned long MOVE_TIMEOUT_MS = 8000;   // safety cutoff

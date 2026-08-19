@@ -1,4 +1,6 @@
 #include "Switch.h"
+#include "FSM.h"
+#include "Event.h"
 
 // Limit Switch Pins
 const int TOP_SWITCH_PIN    = 25;
@@ -32,6 +34,14 @@ void updateLimitSwitches()
     BOTTOM_SWITCH_TOUCHED = (digitalRead(BOTTOM_SWITCH_PIN) == HIGH);
     RIGHT_SWITCH_TOUCHED  = (digitalRead(RIGHT_SWITCH_PIN) == HIGH);
     LEFT_SWITCH_TOUCHED   = (digitalRead(LEFT_SWITCH_PIN) == HIGH);
+    // if (anyLimitReached())
+    // {
+    //     fsm.processEvent(Event::LIMIT_TRIGGERED);
+    // }
+    if (topRightReached())
+    {
+        fsm.processEvent(Event::HOMING_ERROR);
+    }
 }
 
 
@@ -88,6 +98,25 @@ bool anyLimitReached()
            LEFT_SWITCH_TOUCHED;
 }
 
+bool topRightReached()
+{
+    return TOP_SWITCH_TOUCHED || RIGHT_SWITCH_TOUCHED;
+}
+
+bool topLeftReached()
+{
+    return TOP_SWITCH_TOUCHED || LEFT_SWITCH_TOUCHED;
+}
+
+bool bottomRightReached()
+{
+    return BOTTOM_SWITCH_TOUCHED || RIGHT_SWITCH_TOUCHED;
+}
+
+bool bottomLeftReached()
+{
+    return BOTTOM_SWITCH_TOUCHED || LEFT_SWITCH_TOUCHED;
+}
 
 // Home position is bottom-left
 bool homeReached()
