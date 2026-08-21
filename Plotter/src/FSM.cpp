@@ -58,6 +58,12 @@ void FSM::updateState()
 {
     switch(currentState)
     {
+        case State::INITIALIZING:
+
+            initializingUpdate();
+
+            break;
+
         case State::IDLE:
 
             idleUpdate();
@@ -175,8 +181,43 @@ void FSM::exitState(State state)
 
 
 //--------------------------------
+// State readiness checks during INITIALIZING
+//--------------------------------
+bool FSM::motorsReady()
+{
+    // Check motor driver / motor control initialization
+    return true;
+}
+
+bool FSM::switchesReady()
+{
+    // Check limit switches are configured
+    return true;
+}
+
+bool FSM::encoderReady()
+{
+    // Check encoder is giving a valid reading
+    return true;
+}
+
+
+//--------------------------------
 // State update functions
 //--------------------------------
+void FSM::initializingUpdate()
+{
+    if (motorsReady() &&
+        switchesReady() &&
+        encoderReady())
+    {
+        processEvent(Event::INIT_SUCCESS);
+    }
+    else
+    {
+        processEvent(Event::INIT_FAILED);
+    }
+}
 
 void FSM::idleUpdate()
 {
