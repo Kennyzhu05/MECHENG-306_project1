@@ -6,6 +6,7 @@
 // ---- Tunable PI gains and limits ----
 float KP = 0.9; // previous 0.7
 float KI = 0.05;
+float SYNC_KP = 0.4;
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
 int MAX_PWM = 210;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
@@ -139,6 +140,11 @@ void updateMotion()
     {
         integralB += errorB * dt;
     }
+
+    // --- Synchronization ---
+    long syncError = errorA - errorB;
+    outputA -= SYNC_KP * syncError;
+    outputB += SYNC_KP * syncError;
 
     // Once a motor is within tolerance, stop driving it so it
     // doesn't hunt back and forth while the other axis finishes
