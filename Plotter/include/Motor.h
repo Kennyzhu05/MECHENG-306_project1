@@ -3,6 +3,7 @@
 
 void setupMotors();
 void stopMotors();
+void brakeMotors(long targetA, long targetB);
 
 // Direct signed-PWM control of each motor (positive = forward on that
 // motor's own axis convention, negative = reverse). Magnitude 0-255.

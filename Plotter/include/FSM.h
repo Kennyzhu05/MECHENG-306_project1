@@ -60,6 +60,14 @@ private:
 
     void faultUpdate();
 
+    void initializingUpdate();
+
+    bool motorsReady();
+    
+    bool switchesReady();
+
+    bool encoderReady();
+
     //--------------------------------
     // Event processing
     //--------------------------------
