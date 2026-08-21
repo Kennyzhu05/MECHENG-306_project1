@@ -16,8 +16,8 @@ void setupMotors() {
 }
 
 void stopMotors() {
-  analogWrite(M_1_PWM, 0);
   analogWrite(M_2_PWM, 0);
+  analogWrite(M_1_PWM, 0);
 }
 
 // Direct signed-PWM control of each motor.
