@@ -7,10 +7,10 @@
 float KP = 0.9; // previous 0.7
 float KI = 0.05;
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
-int MAX_PWM = 230;
+int MAX_PWM = 210;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
 int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
-unsigned long MOVE_TIMEOUT_MS = 8000;   // safety cutoff
+unsigned long MOVE_TIMEOUT_MS = 10000;   // safety cutoff
 
 // ---- Persistent motion state (replaces the old while-loop locals) ----
 static long targetA = 0;

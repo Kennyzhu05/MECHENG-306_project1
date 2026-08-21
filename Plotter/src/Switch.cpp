@@ -8,11 +8,47 @@ const int BOTTOM_SWITCH_PIN = 24;
 const int RIGHT_SWITCH_PIN  = 23;
 const int LEFT_SWITCH_PIN   = 22;
 
-// Switch States
+// Debounce settings
+const unsigned long DEBOUNCE_DELAY_MS = 20;  // adjust if switches are noisier/cleaner than this
+
+// Debounced (confirmed) switch states - these are what the rest of the code reads
 bool TOP_SWITCH_TOUCHED    = false;
 bool BOTTOM_SWITCH_TOUCHED = false;
 bool RIGHT_SWITCH_TOUCHED  = false;
 bool LEFT_SWITCH_TOUCHED   = false;
+
+// Internal debounce tracking - last raw reading and when it last changed
+namespace {
+    bool topRawLast    = false;
+    bool bottomRawLast = false;
+    bool rightRawLast  = false;
+    bool leftRawLast   = false;
+
+    unsigned long topLastChangeTime    = 0;
+    unsigned long bottomLastChangeTime = 0;
+    unsigned long rightLastChangeTime  = 0;
+    unsigned long leftLastChangeTime   = 0;
+
+    // Debounces a single switch. Call every loop with the current raw reading.
+    // Updates confirmedState in place only once the raw reading has been
+    // stable for DEBOUNCE_DELAY_MS.
+    void debounceSwitch(bool rawReading, bool &rawLast, unsigned long &lastChangeTime,
+                         bool &confirmedState)
+    {
+        if (rawReading != rawLast)
+        {
+            // Raw reading changed - restart the debounce timer
+            lastChangeTime = millis();
+            rawLast = rawReading;
+        }
+
+        if ((millis() - lastChangeTime) >= DEBOUNCE_DELAY_MS)
+        {
+            // Reading has been stable long enough - accept it
+            confirmedState = rawReading;
+        }
+    }
+}
 
 
 // LIMIT SWITCH FUNCTIONS
@@ -24,24 +60,41 @@ void setupSwitches()
     pinMode(BOTTOM_SWITCH_PIN, INPUT_PULLUP);
     pinMode(RIGHT_SWITCH_PIN, INPUT_PULLUP);
     pinMode(LEFT_SWITCH_PIN, INPUT_PULLUP);
+
+    // Seed raw/last state so the first updateLimitSwitches() call doesn't
+    // see a spurious "change" against the default false initializers
+    topRawLast    = (digitalRead(TOP_SWITCH_PIN) == HIGH);
+    bottomRawLast = (digitalRead(BOTTOM_SWITCH_PIN) == HIGH);
+    rightRawLast  = (digitalRead(RIGHT_SWITCH_PIN) == HIGH);
+    leftRawLast   = (digitalRead(LEFT_SWITCH_PIN) == HIGH);
+
+    TOP_SWITCH_TOUCHED    = topRawLast;
+    BOTTOM_SWITCH_TOUCHED = bottomRawLast;
+    RIGHT_SWITCH_TOUCHED  = rightRawLast;
+    LEFT_SWITCH_TOUCHED   = leftRawLast;
+
+    unsigned long now = millis();
+    topLastChangeTime    = now;
+    bottomLastChangeTime = now;
+    rightLastChangeTime  = now;
+    leftLastChangeTime   = now;
 }
 
 
-// Read every limit switch and update the stored states
+// Read every limit switch and update the stored (debounced) states.
+// Must be called frequently (e.g. every loop iteration) for debouncing to work -
+// it relies on repeated sampling over time, not a single blocking read.
 void updateLimitSwitches()
 {
-    TOP_SWITCH_TOUCHED    = (digitalRead(TOP_SWITCH_PIN) == HIGH);
-    BOTTOM_SWITCH_TOUCHED = (digitalRead(BOTTOM_SWITCH_PIN) == HIGH);
-    RIGHT_SWITCH_TOUCHED  = (digitalRead(RIGHT_SWITCH_PIN) == HIGH);
-    LEFT_SWITCH_TOUCHED   = (digitalRead(LEFT_SWITCH_PIN) == HIGH);
-    // if (anyLimitReached())
-    // {
-    //     fsm.processEvent(Event::LIMIT_TRIGGERED);
-    // }
-    // if (topRightReached())
-    // {
-    //     fsm.processEvent(Event::HOMING_ERROR);
-    // }
+    bool topRaw    = (digitalRead(TOP_SWITCH_PIN) == HIGH);
+    bool bottomRaw = (digitalRead(BOTTOM_SWITCH_PIN) == HIGH);
+    bool rightRaw  = (digitalRead(RIGHT_SWITCH_PIN) == HIGH);
+    bool leftRaw   = (digitalRead(LEFT_SWITCH_PIN) == HIGH);
+
+    debounceSwitch(topRaw,    topRawLast,    topLastChangeTime,    TOP_SWITCH_TOUCHED);
+    debounceSwitch(bottomRaw, bottomRawLast, bottomLastChangeTime, BOTTOM_SWITCH_TOUCHED);
+    debounceSwitch(rightRaw,  rightRawLast,  rightLastChangeTime,  RIGHT_SWITCH_TOUCHED);
+    debounceSwitch(leftRaw,   leftRawLast,   leftLastChangeTime,   LEFT_SWITCH_TOUCHED);
 }
 
 

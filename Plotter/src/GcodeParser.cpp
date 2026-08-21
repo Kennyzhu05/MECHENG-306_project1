@@ -87,7 +87,7 @@ void GCodeParser::parseGCode(char* command)
     // RESET
     // -----------------------------
 
-    if (strcmp(command, "RESET") == 0)
+    if (strcmp(command, "999") == 0)
     {
         fsm.processEvent(Event::RESET);
         return;
