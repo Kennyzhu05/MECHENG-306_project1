@@ -24,7 +24,10 @@ enum class Event
     TIMEOUT, 
 
     // Recovery
-    RESET
+    RESET,
+        
+    // Immediately stop current operation and return to IDLE
+    M999_RECEIVED
 };
 
 #endif

@@ -84,6 +84,23 @@ void GCodeParser::parseGCode(char* command)
     }
 
     // -----------------------------
+    // M999
+    // -----------------------------
+
+    if (strcmp(command, "M999") == 0)
+    {
+        Serial.println("M999 received: aborting and returning to IDLE");
+
+        // Remove all commands waiting in the queue
+        clearCommandQueue();
+
+        // Tell FSM to immediately return to IDLE
+        fsm.processEvent(Event::M999_RECEIVED);
+
+        return;
+    }
+
+    // -----------------------------
     // RESET
     // -----------------------------
 
@@ -461,6 +478,19 @@ bool GCodeParser::dequeueG1(
     queueCount--;
 
     return true;
+}
+
+// =====================================================
+// Clear G1 command queue
+// =====================================================
+
+void GCodeParser::clearCommandQueue()
+{
+    queueHead = 0;
+    queueTail = 0;
+    queueCount = 0;
+
+    Serial.println("G1 command queue cleared");
 }
 
 // =====================================================

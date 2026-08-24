@@ -131,6 +131,9 @@ private:
     bool dequeueG1(
         G1Command& command
     );
+
+    // Clear all queued G1 commands
+void clearCommandQueue();
 };
 
 extern GCodeParser gcodeParser;

@@ -361,6 +361,29 @@ void FSM::faultUpdate()
 
 void FSM::processEvent(Event event)
 {
+    
+    // =====================================================
+    // GLOBAL M999 OVERRIDE
+    // =====================================================
+
+    if (event == Event::M999_RECEIVED)
+    {
+        Serial.println(
+            "M999: stopping current operation"
+        );
+
+        // Immediately stop any motor movement
+        abortMotion();
+
+        // Return to IDLE regardless of current state
+        if (currentState != State::IDLE)
+        {
+            changeState(State::IDLE);
+        }
+
+        return;
+    }
+
     switch(currentState)
     {
         case State::INITIALIZING:
