@@ -40,27 +40,39 @@ static int clampInt(int value, int lo, int hi)
     return value;
 }
 
+// ---- Per-move speed cap (replaces flat MAX_PWM as the ceiling used
+// inside toMotorCommand for a given move; MAX_PWM remains the
+// absolute hardware ceiling that speedPercent=100 maps to) ----
+static int moveMaxPWM = MAX_PWM;
+
+static int speedPercentToPWM(int speedPercent)
+{
+    speedPercent = clampInt(speedPercent, 0, 100);
+    return (int)round((speedPercent / 100.0) * MAX_PWM);
+}
+
 // Converts a raw PI output into a signed PWM command: capped at
 // MAX_PWM, and bumped up to MIN_PWM if it's small-but-nonzero so the
 // motor doesn't stall in the "should be moving but isn't" zone.
 static int toMotorCommand(float piOutput)
 {
     int pwm = (int)piOutput;
-    pwm = clampInt(pwm, -MAX_PWM, MAX_PWM);
+    pwm = clampInt(pwm, -moveMaxPWM, moveMaxPWM);
     if (pwm > 0 && pwm < MIN_PWM)
     {
-        pwm = MIN_PWM;
+        pwm = MIN_PWM > moveMaxPWM ? moveMaxPWM : MIN_PWM;
     }
     else if (pwm < 0 && pwm > -MIN_PWM)
     {
-        pwm = -MIN_PWM;
+        pwm = MIN_PWM > moveMaxPWM ? -moveMaxPWM : -MIN_PWM;
     }
     return pwm;
 }
 
-void startMotion(long targetXCounts, long targetYCounts)
+void startMotion(long targetXCounts, long targetYCounts, int speedPercent)
 {
-    // Kinematics: convert the desired X/Y move into per-motor targets
+    moveMaxPWM = speedPercentToPWM(speedPercent);
+
     float targetXmm = (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
     float targetYmm = (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
 
@@ -68,14 +80,11 @@ void startMotion(long targetXCounts, long targetYCounts)
     targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
 
     resetEncoders();
-
     integralA = 0;
     integralB = 0;
     settledCount = 0;
-
     moveStartTime = millis();
     lastTickTime = moveStartTime;
-
     lastResult = MotionResult::NONE;
     motionActive = true;
 }
@@ -194,21 +203,21 @@ void updateMotion()
 }
 
 // ---- Blocking wrapper kept for bench testing outside the FSM ----
-void moveXY(long targetXCounts, long targetYCounts)
+void moveXY(long targetXCounts, long targetYCounts, int speedPercent)
 {
-    startMotion(targetXCounts, targetYCounts);
+    startMotion(targetXCounts, targetYCounts, speedPercent);
     while (isMotionActive())
     {
         updateMotion();
     }
 }
 
-void moveX(long targetCounts)
+void moveX(long targetCounts, int speedPercent)
 {
-    moveXY(targetCounts, 0);
+    moveXY(targetCounts, 0, speedPercent);
 }
 
-void moveY(long targetCounts)
+void moveY(long targetCounts, int speedPercent)
 {
-    moveXY(0, targetCounts);
+    moveXY(0, targetCounts, speedPercent);
 }

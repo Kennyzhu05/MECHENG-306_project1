@@ -23,7 +23,7 @@ enum class MotionResult
 
 // Begin a new move to the given target encoder counts (X/Y space).
 // Resets encoders, integrators, timers, and the settle counter.
-void startMotion(long targetXCounts, long targetYCounts);
+void startMotion(long targetXCounts, long targetYCounts, int speedPercent = 100);
 
 // Call this every loop() iteration. Does ONE PI update tick if a
 // motion is active; does nothing if idle. Non-blocking.
@@ -49,8 +49,8 @@ void abortMotion();
 
 // Blocking convenience wrapper kept for standalone bench testing
 // (bypasses the FSM). Internally just spins calling updateMotion().
-void moveXY(long targetXCounts, long targetYCounts);
-void moveX(long targetCounts);
-void moveY(long targetCounts);
+void moveXY(long targetXCounts, long targetYCounts, int speedPercent = 100);
+void moveX(long targetCounts, int speedPercent = 100);
+void moveY(long targetCounts, int speedPercent = 100);
 
 #endif
