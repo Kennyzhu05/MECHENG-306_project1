@@ -414,6 +414,7 @@ void FSM::processEvent(Event event)
             {
                 long targetX = gcodeParser.getTargetX();
                 long targetY = gcodeParser.getTargetY();
+                long targetFeedRate = gcodeParser.getTargetFeedRate();
                             
                             // Make sure we are checking the latest switch states
                 updateLimitSwitches();
@@ -463,7 +464,7 @@ void FSM::processEvent(Event event)
                 // the movement is allowed.
                 changeState(State::MOVING);
 
-                startMotion(mmToXCounts(targetX), mmToYCounts(targetY));
+                startMotion(mmToXCounts(targetX), mmToYCounts(targetY), targetFeedRate);
             }
 
             // else if (event == Event::LIMIT_TRIGGERED)

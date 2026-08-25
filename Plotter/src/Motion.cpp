@@ -4,11 +4,16 @@
 #include "Encoder.h"
 
 // ---- Tunable PI gains and limits ----
-float KP = 0.9; // previous 0.7
-float KI = 0.05;
+// float KP = 0.9; // previous 0.7
+// float KI = 0.05;
+float KP_A = 0.4;
+float KP_B = 0.9;
+float KI_A = 0.1;
+float KI_B = 0.05;
 float SYNC_KP = 0.4;
+float ADJUSTABLE_SCALE = 0.92; // adjust the speed of motors
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
-int MAX_PWM = 190;
+int MAX_PWM = 200;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
 int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
 unsigned long MOVE_TIMEOUT_MS = 10000;   // safety cutoff
@@ -143,7 +148,7 @@ void updateMotion()
     long errorB = targetB - getRightEncoderCount();
 
     // --- Motor A ---
-    float outputA = KP * errorA + KI * integralA;
+    float outputA = KP_A * errorA + KI_A * integralA;
     int pwmA = toMotorCommand(outputA);
     bool satPosA = (outputA > MAX_PWM && errorA > 0);
     bool satNegA = (outputA < -MAX_PWM && errorA < 0);
@@ -153,7 +158,7 @@ void updateMotion()
     }
 
     // --- Motor B ---
-    float outputB = KP * errorB + KI * integralB;
+    float outputB = KP_B * errorB + KI_B * integralB;
     int pwmB = toMotorCommand(outputB);
     bool satPosB = (outputB > MAX_PWM && errorB > 0);
     bool satNegB = (outputB < -MAX_PWM && errorB < 0);
