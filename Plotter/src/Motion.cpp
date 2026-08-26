@@ -6,20 +6,17 @@
 // ---- Tunable PI gains and limits ----
 // float KP = 0.9; // previous 0.7
 // float KI = 0.05;
-float KP_A = 0.2;
-float KP_B = 0.9;
-float KI_A = 0.05;
-float KI_B = 0.4;
-float SYNC_KP = 0.4;
+float KP_A = 0.4;
+float KP_B = 0.4;
+float KI_A = 0.0;
+float KI_B = 0.0;
+float SYNC_KP = 0.2;
 float ADJUSTABLE_SCALE = 0.92; // adjust the speed of motors
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
 int MAX_PWM = 200;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
 int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
 unsigned long MOVE_TIMEOUT_MS = 10000;   // safety cutoff
-const long MAX_SAFE_TARGET = 30000; //Avoid int overflow for commands that request a more
-// 30000 input (int overflows at 32767, so this is a bit of a safety margin, it is 
-//equivalent to 330mm in X and 200mm in Y, which is larger than the physical limits of the machine)
 
 // ---- Encoder factors ----
 const float X_COUNTS_PER_MM_EXISTING = 20041.8 / 220.0;
@@ -81,56 +78,18 @@ void startMotion(long targetXCounts, long targetYCounts, int speedPercent)
 {
     moveMaxPWM = speedPercentToPWM(speedPercent);
 
-    float targetXmm =
-        (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
+    float targetXmm = (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
+    float targetYmm = (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
 
-    float targetYmm =
-        (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
-
-
-    // Calculate using long first
-    long calculatedTargetA =
-        (long)round(
-            targetXmm * A_X_COUNTS_PER_MM +
-            targetYmm * A_Y_COUNTS_PER_MM
-        );
-
-    long calculatedTargetB =
-        (long)round(
-            targetXmm * B_X_COUNTS_PER_MM -
-            targetYmm * B_Y_COUNTS_PER_MM
-        );
-
-
-    // Check that the requested move is safe
-    const long MAX_SAFE_TARGET = 30000;
-
-    if (abs(calculatedTargetA) > MAX_SAFE_TARGET ||
-        abs(calculatedTargetB) > MAX_SAFE_TARGET)
-    {
-        Serial.println("ERROR: Requested movement is too large");
-
-        motionActive = false;
-        lastResult = MotionResult::INVALID_TARGET;
-
-        stopMotors();
-        return;
-    }
-
-
-    // Safe -> accept target
-    targetA = calculatedTargetA;
-    targetB = calculatedTargetB;
+    targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+    targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
 
     resetEncoders();
-
     integralA = 0;
     integralB = 0;
     settledCount = 0;
-
     moveStartTime = millis();
     lastTickTime = moveStartTime;
-
     lastResult = MotionResult::NONE;
     motionActive = true;
 }
@@ -185,14 +144,17 @@ void updateMotion()
     if (dt <= 0) dt = 0.001;   // guard against a zero dt on fast loops
     lastTickTime = now;
 
+    long encoderA = getLeftEncoderCount();
+    long encoderB = getRightEncoderCount();
+
     long errorA = targetA - getLeftEncoderCount();
     long errorB = targetB - getRightEncoderCount();
 
     // --- Motor A ---
     float outputA = KP_A * errorA + KI_A * integralA;
     int pwmA = toMotorCommand(outputA);
-    bool satPosA = (outputA > MAX_PWM && errorA > 0);
-    bool satNegA = (outputA < -MAX_PWM && errorA < 0);
+    bool satPosA = (outputA > moveMaxPWM && errorA > 0);
+    bool satNegA = (outputA < -moveMaxPWM && errorA < 0);
     if (!satPosA && !satNegA)
     {
         integralA += errorA * dt;
@@ -201,11 +163,25 @@ void updateMotion()
     // --- Motor B ---
     float outputB = KP_B * errorB + KI_B * integralB;
     int pwmB = toMotorCommand(outputB);
-    bool satPosB = (outputB > MAX_PWM && errorB > 0);
-    bool satNegB = (outputB < -MAX_PWM && errorB < 0);
+    bool satPosB = (outputB > moveMaxPWM && errorB > 0);
+    bool satNegB = (outputB < -moveMaxPWM && errorB < 0);
     if (!satPosB && !satNegB)
     {
         integralB += errorB * dt;
+    }
+
+    // --- Syncronization ---
+    if (abs(targetA) > POSITION_TOLERANCE && abs(targetB) > POSITION_TOLERANCE)
+    {
+        float progressA = (float)encoderA / (float)targetA;
+        float progressB = (float)encoderB / (float)targetB;
+
+        float syncError = progressA - progressB;
+
+        float syncCorrection = SYNC_KP * syncError;
+
+        outputA -= syncCorrection;
+        outputB += syncCorrection;
     }
 
     // --- Synchronization ---
@@ -215,8 +191,10 @@ void updateMotion()
 
     // Once a motor is within tolerance, stop driving it so it
     // doesn't hunt back and forth while the other axis finishes
-    if (abs(errorA) <= POSITION_TOLERANCE) pwmA = 0;
-    if (abs(errorB) <= POSITION_TOLERANCE) pwmB = 0;
+    // if (abs(errorA) <= POSITION_TOLERANCE) pwmA = 0;
+    // if (abs(errorB) <= POSITION_TOLERANCE) pwmB = 0;
+    pwmA = toMotorCommand(outputA);
+    pwmB = toMotorCommand(outputB);
 
     driveMotorA(pwmA);
     driveMotorB(pwmB);
