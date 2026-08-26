@@ -221,6 +221,7 @@ void FSM::initializingUpdate()
 
 void FSM::idleUpdate()
 {
+    updateLimitSwitches();
 }
 
 void FSM::homingUpdate()
@@ -463,6 +464,11 @@ void FSM::processEvent(Event event)
 
             if (event == Event::INIT_SUCCESS)
             {
+                updateLimitSwitches();
+                startTopLimitActive = topLimitReached();
+                startBottomLimitActive = bottomLimitReached();
+                startLeftLimitActive = leftLimitReached();
+                startRightLimitActive = rightLimitReached();
                 changeState(State::HOMING);
             }
 

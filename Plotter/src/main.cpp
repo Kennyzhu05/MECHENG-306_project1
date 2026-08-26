@@ -42,6 +42,9 @@ void setup()
   startHoming();
 }
 
+/// TESTING ONLY
+bool movement_finished = false;
+
 void loop()
 {
   gcodeParser.updateSerialCommands();
@@ -53,4 +56,13 @@ void loop()
   fsm.update();
 
   gcodeParser.updateCommandQueue();
+  
+  // if (!movement_finished) {
+  //   resetBottomLeft();
+  //   moveRight(220);
+  //   delay(6000);
+  //   movement_finished = true;
+  // }
+
+  // stopMotors();
 }

@@ -10,8 +10,7 @@ float KP_A = 0.4;
 float KP_B = 0.4;
 float KI_A = 0.0;
 float KI_B = 0.0;
-float SYNC_KP = 0.2;
-float ADJUSTABLE_SCALE = 0.92; // adjust the speed of motors
+float SYNC_KP = 50;
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
 int MAX_PWM = 200;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
@@ -59,20 +58,30 @@ static int speedPercentToPWM(int speedPercent)
 // Converts a raw PI output into a signed PWM command: capped at
 // MAX_PWM, and bumped up to MIN_PWM if it's small-but-nonzero so the
 // motor doesn't stall in the "should be moving but isn't" zone.
-static int toMotorCommand(float piOutput)
+long DECEL_ZONE_COUNTS = 800; // distance-to-target (counts) where speed starts ramping down
+
+static int toMotorCommand(float piOutput, long error)
 {
+    long absError = labs(error);
+    int speedCapNow = moveMaxPWM;
+    if (absError < DECEL_ZONE_COUNTS)
+    {
+        // Linear ramp: MIN_PWM at the target, moveMaxPWM at the edge of the zone
+        float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * ((float)absError / (float)DECEL_ZONE_COUNTS);
+        speedCapNow = (int)round(ramped);
+    }
     int pwm = (int)piOutput;
-    pwm = clampInt(pwm, -moveMaxPWM, moveMaxPWM);
+    pwm = clampInt(pwm, -speedCapNow, speedCapNow);
     if (pwm > 0 && pwm < MIN_PWM)
     {
-        pwm = MIN_PWM > moveMaxPWM ? moveMaxPWM : MIN_PWM;
+        pwm = MIN_PWM > speedCapNow ? speedCapNow : MIN_PWM;
     }
     else if (pwm < 0 && pwm > -MIN_PWM)
     {
-        pwm = MIN_PWM > moveMaxPWM ? -moveMaxPWM : -MIN_PWM;
+        pwm = MIN_PWM > speedCapNow ? -speedCapNow : -MIN_PWM;
     }
     return pwm;
-}
+  }
 
 void startMotion(long targetXCounts, long targetYCounts, int speedPercent)
 {
@@ -150,9 +159,30 @@ void updateMotion()
     long errorA = targetA - getLeftEncoderCount();
     long errorB = targetB - getRightEncoderCount();
 
+    // Both motors settled -> done
+    if (abs(errorA) <= POSITION_TOLERANCE && abs(errorB) <= POSITION_TOLERANCE)
+    {
+        stopMotors();
+
+        settledCount++;
+        if (settledCount >= SETTLE_SAMPLES)
+        {
+            stopMotors();
+            motionActive = false;
+            lastResult = MotionResult::SETTLED;
+        }
+
+        return;
+    }
+    else
+    {
+        settledCount = 0;
+    }
+
+
     // --- Motor A ---
     float outputA = KP_A * errorA + KI_A * integralA;
-    int pwmA = toMotorCommand(outputA);
+    int pwmA = toMotorCommand(outputA, errorA);
     bool satPosA = (outputA > moveMaxPWM && errorA > 0);
     bool satNegA = (outputA < -moveMaxPWM && errorA < 0);
     if (!satPosA && !satNegA)
@@ -162,7 +192,7 @@ void updateMotion()
 
     // --- Motor B ---
     float outputB = KP_B * errorB + KI_B * integralB;
-    int pwmB = toMotorCommand(outputB);
+    int pwmB = toMotorCommand(outputB, errorB);
     bool satPosB = (outputB > moveMaxPWM && errorB > 0);
     bool satNegB = (outputB < -moveMaxPWM && errorB < 0);
     if (!satPosB && !satNegB)
@@ -171,18 +201,18 @@ void updateMotion()
     }
 
     // --- Syncronization ---
-    if (abs(targetA) > POSITION_TOLERANCE && abs(targetB) > POSITION_TOLERANCE)
-    {
-        float progressA = (float)encoderA / (float)targetA;
-        float progressB = (float)encoderB / (float)targetB;
+    // if (abs(targetA) > POSITION_TOLERANCE && abs(targetB) > POSITION_TOLERANCE)
+    // {
+    //     float progressA = (float)encoderA / (float)targetA;
+    //     float progressB = (float)encoderB / (float)targetB;
 
-        float syncError = progressA - progressB;
+    //     float syncError = progressA - progressB;
 
-        float syncCorrection = SYNC_KP * syncError;
+    //     float syncCorrection = SYNC_KP * syncError;
 
-        outputA -= syncCorrection;
-        outputB += syncCorrection;
-    }
+    //     outputA -= syncCorrection;
+    //     outputB += syncCorrection;
+    // }
 
     // --- Synchronization ---
     // long syncError = errorA - errorB;
@@ -193,29 +223,13 @@ void updateMotion()
     // doesn't hunt back and forth while the other axis finishes
     // if (abs(errorA) <= POSITION_TOLERANCE) pwmA = 0;
     // if (abs(errorB) <= POSITION_TOLERANCE) pwmB = 0;
-    pwmA = toMotorCommand(outputA);
-    pwmB = toMotorCommand(outputB);
+    pwmA = toMotorCommand(outputA, errorA);
+    pwmB = toMotorCommand(outputB, errorB);
 
     driveMotorA(pwmA);
     driveMotorB(pwmB);
 
-    // Both motors settled -> done
-    if (abs(errorA) <= POSITION_TOLERANCE && abs(errorB) <= POSITION_TOLERANCE)
-    {
-        settledCount++;
-        if (settledCount >= SETTLE_SAMPLES)
-        {
-            stopMotors();
-            motionActive = false;
-            lastResult = MotionResult::SETTLED;
-            return;
-        }
-    }
-    else
-    {
-        settledCount = 0;
-    }
-
+    
     if (now - moveStartTime >= MOVE_TIMEOUT_MS)
     {
         // Safety timeout: stall, disconnected encoder, sign inversion, etc.
