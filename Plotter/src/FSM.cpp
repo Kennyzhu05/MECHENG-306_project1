@@ -225,11 +225,76 @@ void FSM::idleUpdate()
 
 void FSM::homingUpdate()
 {
+   
+    // Always get the latest physical switch states
+    updateLimitSwitches();
+
+
+    // =================================================
+    // 1. RE-ARM switches that were active at homing start
+    // =================================================
+
+    if (startRightLimitActive && !rightLimitReached())
+    {
+        startRightLimitActive = false;
+        Serial.println("RIGHT limit re-armed during homing");
+    }
+
+    if (startTopLimitActive && !topLimitReached())
+    {
+        startTopLimitActive = false;
+        Serial.println("TOP limit re-armed during homing");
+    }
+
+
+    // =================================================
+    // 2. Check for WRONG limit switches during homing
+    // =================================================
+    //
+    // Assuming homing moves toward LEFT + BOTTOM:
+    //
+    // LEFT   = expected
+    // BOTTOM = expected
+    // RIGHT  = FAULT
+    // TOP    = FAULT
+    //
+    // If RIGHT/TOP was already pressed when homing started,
+    // ignore it until it has first been released.
+
+    if (rightLimitReached() && !startRightLimitActive)
+    {
+        Serial.println("HOMING ERROR: RIGHT limit triggered");
+
+        stopMotors();
+        processEvent(Event::HOMING_ERROR);
+        return;
+    }
+
+    if (topLimitReached() && !startTopLimitActive)
+    {
+        Serial.println("HOMING ERROR: TOP limit triggered");
+
+        stopMotors();
+        processEvent(Event::HOMING_ERROR);
+        return;
+    }
+
+
+    // =================================================
+    // 3. No fault -> continue normal homing
+    // =================================================
+
     updateHoming();
+
+
+    // =================================================
+    // 4. Check whether normal homing has completed
+    // =================================================
 
     if (isHomingComplete())
     {
         processEvent(Event::HOME_COMPLETE);
+        return;
     }
 }
 
@@ -405,9 +470,23 @@ void FSM::processEvent(Event event)
 
             if(event == Event::G28_RECEIVED)
             {
-                changeState(State::HOMING);
+                if(event == Event::G28_RECEIVED)
+                   if(event == Event::G28_RECEIVED)
+                    {
+                        // Get current physical switch states
+                        updateLimitSwitches();
 
-                startHoming();
+                        // Remember which switches were already pressed
+                        // BEFORE homing starts
+                        startTopLimitActive = topLimitReached();
+                        startBottomLimitActive = bottomLimitReached();
+                        startLeftLimitActive = leftLimitReached();
+                        startRightLimitActive = rightLimitReached();
+
+                        changeState(State::HOMING);
+
+                        startHoming();
+                    }
             }
 
             else if(event == Event::G1_RECEIVED)
