@@ -6,10 +6,10 @@
 // ---- Tunable PI gains and limits ----
 // float KP = 0.9; // previous 0.7
 // float KI = 0.05;
-float KP_A = 0.4;
+float KP_A = 0.2;
 float KP_B = 0.9;
-float KI_A = 0.1;
-float KI_B = 0.05;
+float KI_A = 0.05;
+float KI_B = 0.4;
 float SYNC_KP = 0.4;
 float ADJUSTABLE_SCALE = 0.92; // adjust the speed of motors
 int MIN_PWM = 60;      // below this, motors may not overcome static friction
@@ -168,9 +168,9 @@ void updateMotion()
     }
 
     // --- Synchronization ---
-    long syncError = errorA - errorB;
-    outputA -= SYNC_KP * syncError;
-    outputB += SYNC_KP * syncError;
+    // long syncError = errorA - errorB;
+    // outputA -= SYNC_KP * syncError;
+    // outputB += SYNC_KP * syncError;
 
     // Once a motor is within tolerance, stop driving it so it
     // doesn't hunt back and forth while the other axis finishes
