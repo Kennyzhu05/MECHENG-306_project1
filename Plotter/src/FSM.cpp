@@ -396,6 +396,14 @@ void FSM::movingUpdate()
     // when G1_RECEIVED was processed.
     updateMotion();
 
+    // Check whether Motion.cpp rejected the target
+    if (getLastMotionResult() == MotionResult::INVALID_TARGET)
+    {
+        Serial.println("FAULT: Invalid motion target");
+        processEvent(Event::LIMIT_TRIGGERED); // Use LIMIT_TRIGGERED to enter FAULT state
+        return;
+    }
+
     // If the requested position has been reached,
     // return to IDLE.
     if (isMotionDone())

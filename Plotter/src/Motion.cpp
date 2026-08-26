@@ -17,6 +17,9 @@ int MAX_PWM = 200;
 long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
 int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
 unsigned long MOVE_TIMEOUT_MS = 10000;   // safety cutoff
+const long MAX_SAFE_TARGET = 30000; //Avoid int overflow for commands that request a more
+// 30000 input (int overflows at 32767, so this is a bit of a safety margin, it is 
+//equivalent to 330mm in X and 200mm in Y, which is larger than the physical limits of the machine)
 
 // ---- Encoder factors ----
 const float X_COUNTS_PER_MM_EXISTING = 20041.8 / 220.0;
@@ -78,18 +81,56 @@ void startMotion(long targetXCounts, long targetYCounts, int speedPercent)
 {
     moveMaxPWM = speedPercentToPWM(speedPercent);
 
-    float targetXmm = (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
-    float targetYmm = (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
+    float targetXmm =
+        (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
 
-    targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
-    targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
+    float targetYmm =
+        (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
+
+
+    // Calculate using long first
+    long calculatedTargetA =
+        (long)round(
+            targetXmm * A_X_COUNTS_PER_MM +
+            targetYmm * A_Y_COUNTS_PER_MM
+        );
+
+    long calculatedTargetB =
+        (long)round(
+            targetXmm * B_X_COUNTS_PER_MM -
+            targetYmm * B_Y_COUNTS_PER_MM
+        );
+
+
+    // Check that the requested move is safe
+    const long MAX_SAFE_TARGET = 30000;
+
+    if (abs(calculatedTargetA) > MAX_SAFE_TARGET ||
+        abs(calculatedTargetB) > MAX_SAFE_TARGET)
+    {
+        Serial.println("ERROR: Requested movement is too large");
+
+        motionActive = false;
+        lastResult = MotionResult::INVALID_TARGET;
+
+        stopMotors();
+        return;
+    }
+
+
+    // Safe -> accept target
+    targetA = calculatedTargetA;
+    targetB = calculatedTargetB;
 
     resetEncoders();
+
     integralA = 0;
     integralB = 0;
     settledCount = 0;
+
     moveStartTime = millis();
     lastTickTime = moveStartTime;
+
     lastResult = MotionResult::NONE;
     motionActive = true;
 }

@@ -18,7 +18,8 @@ enum class MotionResult
 {
     NONE,       // no move has completed yet since startMotion()
     SETTLED,    // both axes reached tolerance and stayed there
-    TIMED_OUT   // safety cutoff hit before settling
+    TIMED_OUT,   // safety cutoff hit before settling
+    INVALID_TARGET // requested target was too large to be safe, cause int overflow
 };
 
 // Begin a new move to the given target encoder counts (X/Y space).
