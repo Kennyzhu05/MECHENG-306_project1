@@ -6,11 +6,11 @@
     // ---- Tunable PI gains and limits ----
     // float KP = 0.9; // previous 0.7
     // float KI = 0.05;
-    float KP_A = 0.8;
-    float KP_B = 0.9;
-    float KI_A = 0.3;
-    float KI_B = 0.3;
-    float SYNC_KP = 50;
+    float KP_A = 0.6;
+    float KP_B = 0.6;
+    float KI_A = 0.4;
+    float KI_B = 0.4;
+    float SYNC_KP = 0.5;
     int MIN_PWM = 80;      // below this, motors may not overcome static friction
     int MAX_PWM = 240;
     long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
@@ -60,31 +60,77 @@
     // Converts a raw PI output into a signed PWM command: capped at
     // MAX_PWM, and bumped up to MIN_PWM if it's small-but-nonzero so the
     // motor doesn't stall in the "should be moving but isn't" zone.
+    long ACCEL_ZONE_COUNTS = 800;
     long DECEL_ZONE_COUNTS = 800; // distance-to-target (counts) where speed starts ramping down
 
-    static int toMotorCommand(float piOutput, long error)
+    static int toMotorCommand(float piOutput, long error, long target)
     {
         long absError = labs(error);
-        int speedCapNow = moveMaxPWM;
-        if (absError < DECEL_ZONE_COUNTS)
+        long absTarget = labs(target);
+
+        // Distance travelled since beginning of move
+        long travelled = absTarget - absError;
+
+        if (travelled < 0)
         {
-            // Linear ramp: MIN_PWM at the target, moveMaxPWM at the edge of the zone
-            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * ((float)absError / (float)DECEL_ZONE_COUNTS);
+            travelled = 0;
+        }
+
+        int speedCapNow = moveMaxPWM;
+
+
+        // ==============================
+        // Acceleration ramp
+        // ==============================
+        if (travelled < ACCEL_ZONE_COUNTS)
+        {
+            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * 
+                ((float)travelled / (float)ACCEL_ZONE_COUNTS);
+
             speedCapNow = (int)round(ramped);
         }
 
+
+        // ==============================
+        // Deceleration ramp
+        // ==============================
+        if (absError < DECEL_ZONE_COUNTS)
+        {
+            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) *
+                ((float)absError / (float)DECEL_ZONE_COUNTS);
+
+            int decelCap = (int)round(ramped);
+
+            // Use whichever limit is smaller
+            if (decelCap < speedCapNow)
+            {
+                speedCapNow = decelCap;
+            }
+        }
+
+
+        // ==============================
+        // Apply speed limit
+        // ==============================
         int pwm = (int)piOutput;
-        
+
         pwm = clampInt(pwm, -speedCapNow, speedCapNow);
+
+
+        // Overcome static friction
         if (pwm > 0 && pwm < MIN_PWM)
         {
-            pwm = MIN_PWM > speedCapNow ? speedCapNow : MIN_PWM;
+            pwm = MIN_PWM > speedCapNow
+                ? speedCapNow
+                : MIN_PWM;
         }
         else if (pwm < 0 && pwm > -MIN_PWM)
         {
-            pwm = MIN_PWM > speedCapNow ? -speedCapNow : -MIN_PWM;
+            pwm = MIN_PWM > speedCapNow
+                ? -speedCapNow
+                : -MIN_PWM;
         }
-        
+
         return pwm;
     }
 
@@ -92,6 +138,8 @@
     {
         moveMaxPWM = speedPercentToPWM(speedPercent);
 
+        targetA = 0;
+        targetB = 0;
         float targetXmm = (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
         float targetYmm = (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
         
@@ -112,23 +160,25 @@
             return;
         }
 
-        // Only drive motors required
-        if ((targetXCounts > 0 && targetYCounts > 0) || (targetXCounts < 0 && targetYCounts < 0))
-        {
-            // Only Motor A contributes
-            targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
-            targetB = 0;
-        } else if ((targetXCounts > 0 && targetYCounts < 0) || (targetXCounts < 0 && targetYCounts > 0))
-        {
-            // Only Motor B contributes
-            targetA = 0;
-            targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
-        } else
-        {
-            targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
-            targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
-        }
+        // // Only drive motors required
+        // if ((targetXCounts > 0 && targetYCounts > 0) || (targetXCounts < 0 && targetYCounts < 0))
+        // {
+        //     // Only Motor A contributes
+        //     targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+        //     targetB = 0;
+        // } else if ((targetXCounts > 0 && targetYCounts < 0) || (targetXCounts < 0 && targetYCounts > 0))
+        // {
+        //     // Only Motor B contributes
+        //     targetA = 0;
+        //     targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
+        // } else
+        // {
+        //     targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+        //     targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
+        // }
         
+        targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+        targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
 
         resetEncoders();
         integralA = 0;
@@ -138,6 +188,8 @@
         lastTickTime = moveStartTime;
         lastResult = MotionResult::NONE;
         motionActive = true;
+
+        Serial.println("time_ms,encoderA,targetA,errorA,pwmA,encoderB,targetB,errorB,pwmB");
     }
 
     void abortMotion()
@@ -196,27 +248,6 @@
         long errorA = targetA - encoderA;
         long errorB = targetB - encoderB;
 
-        // Debugging monitor messages
-        static unsigned long lastPrintTime = 0;
-        const unsigned long PRINT_INTERVAL_MS = 100;
-        if (now - lastPrintTime >= PRINT_INTERVAL_MS)
-        {
-            Serial.print(now - moveStartTime);
-            Serial.print("ms | A: ");
-            Serial.print(encoderA);
-            Serial.print(" (tgt ");
-            Serial.print(targetA);
-            Serial.print(", err ");
-            Serial.print(errorA);
-            Serial.print(") | B: ");
-            Serial.print(encoderB);
-            Serial.print(" (tgt ");
-            Serial.print(targetB);
-            Serial.print(", err ");
-            Serial.print(errorB);
-            Serial.println(")");
-            lastPrintTime = now;
-        }
 
         // Both motors settled -> done
         if (abs(errorA) <= POSITION_TOLERANCE && abs(errorB) <= POSITION_TOLERANCE)
@@ -241,7 +272,7 @@
 
         // --- Motor A ---
         float outputA = KP_A * errorA + KI_A * integralA;
-        int pwmA = toMotorCommand(outputA, errorA);
+        
         bool satPosA = (outputA > moveMaxPWM && errorA > 0);
         bool satNegA = (outputA < -moveMaxPWM && errorA < 0);
         if (!satPosA && !satNegA)
@@ -251,7 +282,7 @@
 
         // --- Motor B ---
         float outputB = KP_B * errorB + KI_B * integralB;
-        int pwmB = toMotorCommand(outputB, errorB);
+        
         bool satPosB = (outputB > moveMaxPWM && errorB > 0);
         bool satNegB = (outputB < -moveMaxPWM && errorB < 0);
         if (!satPosB && !satNegB)
@@ -259,17 +290,41 @@
             integralB += errorB * dt;
         }
 
-        // --- Synchronization ---
-        // long syncError = errorA - errorB;
-        // outputA -= SYNC_KP * syncError;
-        // outputB += SYNC_KP * syncError;
-
         // Once a motor is within tolerance, stop driving it so it
         // doesn't hunt back and forth while the other axis finishes
         // if (abs(errorA) <= POSITION_TOLERANCE) pwmA = 0;
         // if (abs(errorB) <= POSITION_TOLERANCE) pwmB = 0;
-        pwmA = toMotorCommand(outputA, errorA);
-        pwmB = toMotorCommand(outputB, errorB);
+        int pwmA = toMotorCommand(outputA, errorA, targetA);
+        int pwmB = toMotorCommand(outputB, errorB, targetB);
+
+        // Debugging monitor messages
+        static unsigned long lastPrintTime = 0;
+        const unsigned long PRINT_INTERVAL_MS = 100;
+
+        if (now - lastPrintTime >= PRINT_INTERVAL_MS)
+        {
+            Serial.print(now - moveStartTime);
+            Serial.print(",");
+
+            Serial.print(encoderA);
+            Serial.print(",");
+            Serial.print(targetA);
+            Serial.print(",");
+            Serial.print(errorA);
+            Serial.print(",");
+            Serial.print(pwmA);
+            Serial.print(",");
+
+            Serial.print(encoderB);
+            Serial.print(",");
+            Serial.print(targetB);
+            Serial.print(",");
+            Serial.print(errorB);
+            Serial.print(",");
+            Serial.println(pwmB);
+
+            lastPrintTime = now;
+        }
 
         driveMotorA(pwmA);
         driveMotorB(pwmB);
