@@ -43,7 +43,7 @@ void setup()
 }
 
 /// TESTING ONLY
-bool movement_finished = false;
+// bool movement_finished = false;
 
 void loop()
 {
@@ -57,6 +57,8 @@ void loop()
 
   gcodeParser.updateCommandQueue();
   
+  // updateBoundaryTest();
+
   // if (!movement_finished) {
   //   resetBottomLeft();
   //   moveRight(220);
