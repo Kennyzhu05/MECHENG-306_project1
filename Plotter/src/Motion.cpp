@@ -6,13 +6,13 @@
     // ---- Tunable PI gains and limits ----
     // float KP = 0.9; // previous 0.7
     // float KI = 0.05;
-    float KP_A = 0.3;
-    float KP_B = 0.3;
-    float KI_A = 0.05;
-    float KI_B = 0.05;
+    float KP_A = 0.8;
+    float KP_B = 0.9;
+    float KI_A = 0.3;
+    float KI_B = 0.3;
     float SYNC_KP = 50;
-    int MIN_PWM = 40;      // below this, motors may not overcome static friction
-    int MAX_PWM = 200;
+    int MIN_PWM = 80;      // below this, motors may not overcome static friction
+    int MAX_PWM = 240;
     long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
     int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
     unsigned long MOVE_TIMEOUT_MS = 100000;   // safety cutoff
@@ -93,9 +93,22 @@
         float targetXmm = (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
         float targetYmm = (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
 
-        targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
-        targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
-
+        if ((targetXCounts > 0 && targetYCounts > 0) || (targetXCounts < 0 && targetYCounts < 0))
+        {
+            // Only Motor A contributes
+            targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+            targetB = 0;
+        } else if ((targetXCounts > 0 && targetYCounts < 0) || (targetXCounts < 0 && targetYCounts > 0))
+        {
+            // Only Motor B contributes
+            targetA = 0;
+            targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
+        } else
+        {
+            targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+            targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
+        }
+        
         resetEncoders();
         integralA = 0;
         integralB = 0;
