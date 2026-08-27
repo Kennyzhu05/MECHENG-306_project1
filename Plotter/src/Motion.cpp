@@ -350,19 +350,19 @@
         int pwmB = toMotorCommand(outputB, errorB, masterTravelled, masterTarget, ratioB);
 
 
-        // ======================================================
-        // STOP INDIVIDUAL MOTOR WHEN IT REACHES TARGET
-        // ======================================================
+        // // ======================================================
+        // // STOP INDIVIDUAL MOTOR WHEN IT REACHES TARGET
+        // // ======================================================
 
-        if (labs(errorA) <= POSITION_TOLERANCE)
-        {
-            pwmA = 0;
-        }
+        // if (labs(errorA) <= POSITION_TOLERANCE)
+        // {
+        //     pwmA = 0;
+        // }
 
-        if (labs(errorB) <= POSITION_TOLERANCE)
-        {
-            pwmB = 0;
-        }
+        // if (labs(errorB) <= POSITION_TOLERANCE)
+        // {
+        //     pwmB = 0;
+        // }
 
 
         // ======================================================
@@ -437,21 +437,15 @@
         // Motor A
         // ------------------------------
 
-        if (labs(errorA) <= POSITION_TOLERANCE)
-        {
-            pwmA = 0;
-        }
-        else if (pwmA != 0 && abs(pwmA) < MIN_PWM)
+        // Motor A
+        if (pwmA != 0 && abs(pwmA) < MIN_PWM)
         {
             if (motorAAhead)
             {
-                // A is ahead, so pause it
                 pwmA = 0;
             }
             else
             {
-                // A still needs to catch up.
-                // Give it enough power to actually move.
                 pwmA = (errorA > 0) ? MIN_PWM : -MIN_PWM;
             }
         }
@@ -461,20 +455,15 @@
         // Motor B
         // ------------------------------
 
-        if (labs(errorB) <= POSITION_TOLERANCE)
-        {
-            pwmB = 0;
-        }
-        else if (pwmB != 0 && abs(pwmB) < MIN_PWM)
+        // Motor B
+        if (pwmB != 0 && abs(pwmB) < MIN_PWM)
         {
             if (motorBAhead)
             {
-                // B is ahead, so pause it
                 pwmB = 0;
             }
             else
             {
-                // B still needs to catch up
                 pwmB = (errorB > 0) ? MIN_PWM : -MIN_PWM;
             }
         }
