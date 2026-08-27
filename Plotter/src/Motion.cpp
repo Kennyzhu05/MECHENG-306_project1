@@ -16,6 +16,7 @@
     long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
     int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
     unsigned long MOVE_TIMEOUT_MS = 100000;   // safety cutoff
+    const long MAX_SAFE_TARGET = 30000; //Variable used to prevent integer overflow
 
     // ---- Encoder factors ----
     const float X_COUNTS_PER_MM_EXISTING = 20041.8 / 220.0;
@@ -25,6 +26,7 @@
     const float B_X_COUNTS_PER_MM = 19807.8 / 220.0;
     const float A_Y_COUNTS_PER_MM = 12393.6 / 130.0;
     const float B_Y_COUNTS_PER_MM = 12285.6 / 130.0;
+    
 
     // ---- Persistent motion state (replaces the old while-loop locals) ----
     static long targetA = 0;
@@ -92,7 +94,25 @@
 
         float targetXmm = (float)targetXCounts / X_COUNTS_PER_MM_EXISTING;
         float targetYmm = (float)targetYCounts / Y_COUNTS_PER_MM_EXISTING;
+        
+        // Calculate targets first
+        long calculatedTargetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
+        long calculatedTargetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
 
+        // Check that the requested move is safe
+        if (abs(calculatedTargetA) > MAX_SAFE_TARGET ||
+            abs(calculatedTargetB) > MAX_SAFE_TARGET)
+        {
+            Serial.println("ERROR: Requested movement will cause integer overflow");
+
+            motionActive = false;
+            lastResult = MotionResult::INVALID_TARGET;
+
+            stopMotors();
+            return;
+        }
+
+        // Only drive motors required
         if ((targetXCounts > 0 && targetYCounts > 0) || (targetXCounts < 0 && targetYCounts < 0))
         {
             // Only Motor A contributes
@@ -109,6 +129,7 @@
             targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
         }
         
+
         resetEncoders();
         integralA = 0;
         integralB = 0;
