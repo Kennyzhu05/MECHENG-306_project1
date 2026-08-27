@@ -6,17 +6,18 @@
     // ---- Tunable PI gains and limits ----
     // float KP = 0.9; // previous 0.7
     // float KI = 0.05;
-    float KP_A = 0.6;
-    float KP_B = 0.6;
-    float KI_A = 0.4;
-    float KI_B = 0.4;
-    float SYNC_KP = 0.5;
-    int MIN_PWM = 80;      // below this, motors may not overcome static friction
+    float KP_A = 0.43;
+    float KP_B = 0.43;
+    float KI_A = 0.38;
+    float KI_B = 0.38;
+    float SYNC_KP = 3;
+    long SYNC_START_COUNTS = 150;
+    int MIN_PWM = 100;      // below this, motors may not overcome static friction
     int MAX_PWM = 240;
-    long POSITION_TOLERANCE = 5;   // encoder counts considered "close enough"
+    long POSITION_TOLERANCE = 12;   // encoder counts considered "close enough"
     int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
     unsigned long MOVE_TIMEOUT_MS = 100000;   // safety cutoff
-    const long MAX_SAFE_TARGET = 30000; //Variable used to prevent integer overflow
+    const long MAX_SAFE_TARGET = 30000; // Variable used to prevent integer overflow
 
     // ---- Encoder factors ----
     const float X_COUNTS_PER_MM_EXISTING = 20041.8 / 220.0;
@@ -54,82 +55,103 @@
     static int speedPercentToPWM(int speedPercent)
     {
         speedPercent = clampInt(speedPercent, 0, 100);
-        return (int)round((speedPercent / 100.0) * MAX_PWM);
+
+        if (speedPercent == 0)
+        {
+            return 0;
+        }
+
+        int pwm =
+            (int)round((speedPercent / 100.0f) * MAX_PWM);
+
+        // Any non-zero movement needs enough power
+        // to overcome static friction.
+        if (pwm < MIN_PWM)
+        {
+            pwm = MIN_PWM;
+        }
+
+        return pwm;
     }
 
     // Converts a raw PI output into a signed PWM command: capped at
     // MAX_PWM, and bumped up to MIN_PWM if it's small-but-nonzero so the
     // motor doesn't stall in the "should be moving but isn't" zone.
-    long ACCEL_ZONE_COUNTS = 800;
-    long DECEL_ZONE_COUNTS = 800; // distance-to-target (counts) where speed starts ramping down
+    long ACCEL_ZONE_COUNTS = 1000;
+    long DECEL_ZONE_COUNTS = 1000; // distance-to-target (counts) where speed starts ramping down
 
-    static int toMotorCommand(float piOutput, long error, long target)
+    static int toMotorCommand(float piOutput, long error, long masterTravelled, long masterTarget, float motorRatio)
     {
-        long absError = labs(error);
-        long absTarget = labs(target);
+        long masterRemaining = masterTarget - masterTravelled;
 
-        // Distance travelled since beginning of move
-        long travelled = absTarget - absError;
-
-        if (travelled < 0)
+        if (masterRemaining < 0)
         {
-            travelled = 0;
+            masterRemaining = 0;
         }
 
-        int speedCapNow = moveMaxPWM;
+        int masterSpeedCap = moveMaxPWM;
 
 
         // ==============================
         // Acceleration ramp
         // ==============================
-        if (travelled < ACCEL_ZONE_COUNTS)
+        if (masterTravelled < ACCEL_ZONE_COUNTS)
         {
-            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * 
-                ((float)travelled / (float)ACCEL_ZONE_COUNTS);
+            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * ((float)masterTravelled /
+                (float)ACCEL_ZONE_COUNTS);
 
-            speedCapNow = (int)round(ramped);
+            masterSpeedCap = (int)round(ramped);
         }
 
 
         // ==============================
         // Deceleration ramp
         // ==============================
-        if (absError < DECEL_ZONE_COUNTS)
+        if (masterRemaining < DECEL_ZONE_COUNTS)
         {
-            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) *
-                ((float)absError / (float)DECEL_ZONE_COUNTS);
+            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * ((float)masterRemaining /
+                (float)DECEL_ZONE_COUNTS);
 
             int decelCap = (int)round(ramped);
 
-            // Use whichever limit is smaller
-            if (decelCap < speedCapNow)
+            if (decelCap < masterSpeedCap)
             {
-                speedCapNow = decelCap;
+                masterSpeedCap = decelCap;
             }
+        }
+
+
+        // =====================================================
+        // Scale speed according to this motor's required travel
+        // =====================================================
+        int speedCapNow = (int)round((float)masterSpeedCap * motorRatio);
+
+        if (speedCapNow > moveMaxPWM)
+        {
+            speedCapNow = moveMaxPWM;
         }
 
 
         // ==============================
         // Apply speed limit
         // ==============================
-        int pwm = (int)piOutput;
+        int pwm = (int)round(piOutput);
 
         pwm = clampInt(pwm, -speedCapNow, speedCapNow);
 
 
+        // ==============================
         // Overcome static friction
+        // ==============================
         if (pwm > 0 && pwm < MIN_PWM)
         {
-            pwm = MIN_PWM > speedCapNow
-                ? speedCapNow
-                : MIN_PWM;
+            pwm = (MIN_PWM > speedCapNow) ? speedCapNow : MIN_PWM;
         }
         else if (pwm < 0 && pwm > -MIN_PWM)
         {
-            pwm = MIN_PWM > speedCapNow
-                ? -speedCapNow
-                : -MIN_PWM;
+            pwm = (MIN_PWM > speedCapNow) ? -speedCapNow : -MIN_PWM;
         }
+
 
         return pwm;
     }
@@ -159,23 +181,6 @@
             stopMotors();
             return;
         }
-
-        // // Only drive motors required
-        // if ((targetXCounts > 0 && targetYCounts > 0) || (targetXCounts < 0 && targetYCounts < 0))
-        // {
-        //     // Only Motor A contributes
-        //     targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
-        //     targetB = 0;
-        // } else if ((targetXCounts > 0 && targetYCounts < 0) || (targetXCounts < 0 && targetYCounts > 0))
-        // {
-        //     // Only Motor B contributes
-        //     targetA = 0;
-        //     targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
-        // } else
-        // {
-        //     targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
-        //     targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
-        // }
         
         targetA = (long)round(targetXmm * A_X_COUNTS_PER_MM + targetYmm * A_Y_COUNTS_PER_MM);
         targetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
@@ -290,12 +295,189 @@
             integralB += errorB * dt;
         }
 
-        // Once a motor is within tolerance, stop driving it so it
-        // doesn't hunt back and forth while the other axis finishes
-        // if (abs(errorA) <= POSITION_TOLERANCE) pwmA = 0;
-        // if (abs(errorB) <= POSITION_TOLERANCE) pwmB = 0;
-        int pwmA = toMotorCommand(outputA, errorA, targetA);
-        int pwmB = toMotorCommand(outputB, errorB, targetB);
+        // ======================================================
+        // SHARED MASTER TRAJECTORY
+        // ======================================================
+        long absTargetA = labs(targetA);
+        long absTargetB = labs(targetB);
+
+        // Longest motor movement is the master trajectory
+        long masterTarget = (absTargetA >= absTargetB) ? absTargetA : absTargetB;
+
+
+        // ======================================================
+        // MASTER PROGRESS
+        // ======================================================
+
+        long masterTravelled = 0;
+
+        if (absTargetA >= absTargetB)
+        {
+            masterTravelled = labs(encoderA);
+        }
+        else
+        {
+            masterTravelled = labs(encoderB);
+        }
+
+        // Prevent progress going outside the trajectory
+        if (masterTravelled > masterTarget)
+        {
+            masterTravelled = masterTarget;
+        }
+
+
+        // ======================================================
+        // MOTOR TRAVEL RATIOS
+        // ======================================================
+
+        float ratioA = 0.0f;
+        float ratioB = 0.0f;
+
+        if (masterTarget > 0)
+        {
+            ratioA = (float)absTargetA / (float)masterTarget;
+
+            ratioB = (float)absTargetB / (float)masterTarget;
+        }
+
+
+        // ======================================================
+        // PI OUTPUT -> PWM
+        // ======================================================
+
+        int pwmA = toMotorCommand(outputA, errorA, masterTravelled, masterTarget, ratioA);
+        int pwmB = toMotorCommand(outputB, errorB, masterTravelled, masterTarget, ratioB);
+
+
+        // ======================================================
+        // STOP INDIVIDUAL MOTOR WHEN IT REACHES TARGET
+        // ======================================================
+
+        if (labs(errorA) <= POSITION_TOLERANCE)
+        {
+            pwmA = 0;
+        }
+
+        if (labs(errorB) <= POSITION_TOLERANCE)
+        {
+            pwmB = 0;
+        }
+
+
+        // ======================================================
+        // PROGRESS SYNCHRONISATION
+        //
+        // Compare percentage progress.
+        // If one motor gets ahead, slow that motor slightly.
+        // Do NOT speed the other motor above its trajectory cap.
+        // ======================================================
+        float progressError = 0.0f;
+        bool syncActive = false;
+
+        if (masterTravelled > SYNC_START_COUNTS && absTargetA > POSITION_TOLERANCE &&
+            absTargetB > POSITION_TOLERANCE && labs(errorA) > POSITION_TOLERANCE &&
+            labs(errorB) > POSITION_TOLERANCE)
+        {
+            float progressA = (float)encoderA / (float)targetA;
+
+            float progressB = (float)encoderB / (float)targetB;
+
+            progressError = progressA - progressB;
+            syncActive = true;
+
+
+            int syncCorrection = (int)round( SYNC_KP * fabs(progressError) * moveMaxPWM);
+
+            // Don't let sync correction become excessive
+            syncCorrection = clampInt( syncCorrection, 0, moveMaxPWM / 4);
+
+
+            // A is ahead -> slow A
+            if (progressError > 0.0f)
+            {
+                int magnitude = abs(pwmA);
+
+                magnitude -= syncCorrection;
+
+                if (magnitude < 0)
+                {
+                    magnitude = 0;
+                }
+
+                pwmA = (errorA >= 0) ? magnitude : -magnitude;
+            }
+
+            // B is ahead -> slow B
+            else if (progressError < 0.0f)
+            {
+                int magnitude = abs(pwmB);
+
+                magnitude -= syncCorrection;
+
+                if (magnitude < 0)
+                {
+                    magnitude = 0;
+                }
+
+                pwmB = (errorB >= 0) ? magnitude : -magnitude;
+            }
+        }
+
+        // ======================================================
+        // STATIC FRICTION / LOW PWM HANDLING
+        // ======================================================
+
+        // Is each motor currently ahead of the desired trajectory?
+        bool motorAAhead = syncActive && progressError > 0.0f;
+        bool motorBAhead =  syncActive && progressError < 0.0f;
+
+
+        // ------------------------------
+        // Motor A
+        // ------------------------------
+
+        if (labs(errorA) <= POSITION_TOLERANCE)
+        {
+            pwmA = 0;
+        }
+        else if (pwmA != 0 && abs(pwmA) < MIN_PWM)
+        {
+            if (motorAAhead)
+            {
+                // A is ahead, so pause it
+                pwmA = 0;
+            }
+            else
+            {
+                // A still needs to catch up.
+                // Give it enough power to actually move.
+                pwmA = (errorA > 0) ? MIN_PWM : -MIN_PWM;
+            }
+        }
+
+
+        // ------------------------------
+        // Motor B
+        // ------------------------------
+
+        if (labs(errorB) <= POSITION_TOLERANCE)
+        {
+            pwmB = 0;
+        }
+        else if (pwmB != 0 && abs(pwmB) < MIN_PWM)
+        {
+            if (motorBAhead)
+            {
+                // B is ahead, so pause it
+                pwmB = 0;
+            }
+            else
+            {
+                // B still needs to catch up
+                pwmB = (errorB > 0) ? MIN_PWM : -MIN_PWM;
+            }
+        }
 
         // Debugging monitor messages
         static unsigned long lastPrintTime = 0;
