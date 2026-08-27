@@ -405,6 +405,14 @@ void FSM::movingUpdate()
         return;
     }
 
+    // Timeout -> FAULT
+    if (getLastMotionResult() == MotionResult::TIMED_OUT)
+    {
+        Serial.println("FAULT: Motion timed out");
+        processEvent(Event::TIMEOUT);
+        return;
+    }
+
     // If the requested position has been reached,
     // return to IDLE.
     if (isMotionDone())
