@@ -19,7 +19,7 @@
     int PATH_MAX_CORRECTION = 40;
     long POSITION_TOLERANCE = 12;   // encoder counts considered "close enough"
     int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
-    unsigned long MOVE_TIMEOUT_MS = 15000;   // safety cutoff
+    unsigned long MOVE_TIMEOUT_MS = 8000;   // safety cutoff
     const long MAX_SAFE_TARGET = 30000; // Variable used to prevent integer overflow
 
     // ---- Encoder factors ----
@@ -390,8 +390,7 @@
 
 
             if (masterTravelled > SYNC_START_COUNTS &&
-                labs(errorA) > POSITION_TOLERANCE &&
-                labs(errorB) > POSITION_TOLERANCE)
+                labs(errorA) > POSITION_TOLERANCE && labs(errorB) > POSITION_TOLERANCE)
             {
                 syncActive = true;
 
@@ -411,21 +410,14 @@
 
 
                     // Where B SHOULD be right now
-                    long desiredB =
-                        (long)round((float)targetB * masterProgress);
+                    long desiredB = (long)round((float)targetB * masterProgress);
 
-                    long pathErrorB =
-                        desiredB - encoderB;
+                    long pathErrorB = desiredB - encoderB;
 
 
-                    int correction =
-                        (int)round(PATH_KP * pathErrorB);
+                    int correction = (int)round(PATH_KP * pathErrorB);
 
-                    correction = clampInt(
-                        correction,
-                        -PATH_MAX_CORRECTION,
-                        PATH_MAX_CORRECTION
-                    );
+                    correction = clampInt(correction, -PATH_MAX_CORRECTION, PATH_MAX_CORRECTION);
 
 
                     pwmB += correction;
@@ -459,21 +451,14 @@
 
 
                     // Where A SHOULD be right now
-                    long desiredA =
-                        (long)round((float)targetA * masterProgress);
+                    long desiredA = (long)round((float)targetA * masterProgress);
 
-                    long pathErrorA =
-                        desiredA - encoderA;
+                    long pathErrorA = desiredA - encoderA;
 
 
-                    int correction =
-                        (int)round(PATH_KP * pathErrorA);
+                    int correction = (int)round(PATH_KP * pathErrorA);
 
-                    correction = clampInt(
-                        correction,
-                        -PATH_MAX_CORRECTION,
-                        PATH_MAX_CORRECTION
-                    );
+                    correction = clampInt(correction, -PATH_MAX_CORRECTION, PATH_MAX_CORRECTION);
 
 
                     pwmA += correction;
@@ -540,30 +525,30 @@
         static unsigned long lastPrintTime = 0;
         const unsigned long PRINT_INTERVAL_MS = 100;
 
-        // if (now - lastPrintTime >= PRINT_INTERVAL_MS)
-        // {
-        //     Serial.print(now - moveStartTime);
-        //     Serial.print(",");
+        if (now - lastPrintTime >= PRINT_INTERVAL_MS)
+        {
+            Serial.print(now - moveStartTime);
+            Serial.print(",");
 
-        //     Serial.print(encoderA);
-        //     Serial.print(",");
-        //     Serial.print(targetA);
-        //     Serial.print(",");
-        //     Serial.print(errorA);
-        //     Serial.print(",");
-        //     Serial.print(pwmA);
-        //     Serial.print(",");
+            Serial.print(encoderA);
+            Serial.print(",");
+            Serial.print(targetA);
+            Serial.print(",");
+            Serial.print(errorA);
+            Serial.print(",");
+            Serial.print(pwmA);
+            Serial.print(",");
 
-        //     Serial.print(encoderB);
-        //     Serial.print(",");
-        //     Serial.print(targetB);
-        //     Serial.print(",");
-        //     Serial.print(errorB);
-        //     Serial.print(",");
-        //     Serial.println(pwmB);
+            Serial.print(encoderB);
+            Serial.print(",");
+            Serial.print(targetB);
+            Serial.print(",");
+            Serial.print(errorB);
+            Serial.print(",");
+            Serial.println(pwmB);
 
-        //     lastPrintTime = now;
-        // }
+            lastPrintTime = now;
+        }
 
         driveMotorA(pwmA);
         driveMotorB(pwmB);
