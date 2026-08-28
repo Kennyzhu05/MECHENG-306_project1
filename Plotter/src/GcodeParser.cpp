@@ -34,6 +34,7 @@ void GCodeParser::updateSerialCommands()
     {
         char receivedChar = Serial.read();
 
+        Serial.write(receivedChar);
         // End of one command
         if (receivedChar == '\n' || receivedChar == '\r')
         {
@@ -41,6 +42,10 @@ void GCodeParser::updateSerialCommands()
             {
                 // Terminate C-string
                 commandBuffer[commandIndex] = '\0';
+
+                // Echo command typed in Serial Monitor
+                Serial.print("Command received: ");
+                Serial.println(commandBuffer);
 
                 // Parse complete command
                 parseGCode(commandBuffer);

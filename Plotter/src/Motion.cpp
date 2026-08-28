@@ -10,13 +10,16 @@
     float KP_B = 0.43;
     float KI_A = 0.38;
     float KI_B = 0.38;
-    float SYNC_KP = 3;
-    long SYNC_START_COUNTS = 150;
-    int MIN_PWM = 100;      // below this, motors may not overcome static friction
+    float SYNC_KP = 2;
+    long SYNC_START_COUNTS = 10;
+    int MIN_PWM = 50;      // below this, motors may not overcome static friction
+    int START_PWM = 100;
     int MAX_PWM = 240;
+    float PATH_KP = 0.15f;
+    int PATH_MAX_CORRECTION = 40;
     long POSITION_TOLERANCE = 12;   // encoder counts considered "close enough"
     int SETTLE_SAMPLES = 5;        // consecutive in-tolerance loops before stopping
-    unsigned long MOVE_TIMEOUT_MS = 100000;   // safety cutoff
+    unsigned long MOVE_TIMEOUT_MS = 15000;   // safety cutoff
     const long MAX_SAFE_TARGET = 30000; // Variable used to prevent integer overflow
 
     // ---- Encoder factors ----
@@ -77,8 +80,8 @@
     // Converts a raw PI output into a signed PWM command: capped at
     // MAX_PWM, and bumped up to MIN_PWM if it's small-but-nonzero so the
     // motor doesn't stall in the "should be moving but isn't" zone.
-    long ACCEL_ZONE_COUNTS = 1000;
-    long DECEL_ZONE_COUNTS = 1000; // distance-to-target (counts) where speed starts ramping down
+    long ACCEL_ZONE_COUNTS = 900;
+    long DECEL_ZONE_COUNTS = 900; // distance-to-target (counts) where speed starts ramping down
 
     static int toMotorCommand(float piOutput, long error, long masterTravelled, long masterTarget, float motorRatio)
     {
@@ -97,7 +100,7 @@
         // ==============================
         if (masterTravelled < ACCEL_ZONE_COUNTS)
         {
-            float ramped = MIN_PWM + (float)(moveMaxPWM - MIN_PWM) * ((float)masterTravelled /
+            float ramped = START_PWM + (float)(moveMaxPWM - START_PWM) * ((float)masterTravelled /
                 (float)ACCEL_ZONE_COUNTS);
 
             masterSpeedCap = (int)round(ramped);
@@ -366,71 +369,136 @@
 
 
         // ======================================================
-        // PROGRESS SYNCHRONISATION
-        //
-        // Compare percentage progress.
-        // If one motor gets ahead, slow that motor slightly.
-        // Do NOT speed the other motor above its trajectory cap.
+        // STRAIGHT-LINE PATH SYNCHRONISATION
         // ======================================================
-        float progressError = 0.0f;
+
         bool syncActive = false;
+        bool motorAAhead = false;
+        bool motorBAhead = false;
 
-        if (masterTravelled > SYNC_START_COUNTS && absTargetA > POSITION_TOLERANCE &&
-            absTargetB > POSITION_TOLERANCE && labs(errorA) > POSITION_TOLERANCE &&
-            labs(errorB) > POSITION_TOLERANCE)
+        float progressA = 0.0f;
+        float progressB = 0.0f;
+
+        if (absTargetA > POSITION_TOLERANCE &&
+            absTargetB > POSITION_TOLERANCE)
         {
-            float progressA = (float)encoderA / (float)targetA;
+            progressA = (float)encoderA / (float)targetA;
+            progressB = (float)encoderB / (float)targetB;
 
-            float progressB = (float)encoderB / (float)targetB;
-
-            progressError = progressA - progressB;
-            syncActive = true;
-
-
-            int syncCorrection = (int)round( SYNC_KP * fabs(progressError) * moveMaxPWM);
-
-            // Don't let sync correction become excessive
-            syncCorrection = clampInt( syncCorrection, 0, moveMaxPWM / 4);
+            motorAAhead = progressA > progressB;
+            motorBAhead = progressB > progressA;
 
 
-            // A is ahead -> slow A
-            if (progressError > 0.0f)
+            if (masterTravelled > SYNC_START_COUNTS &&
+                labs(errorA) > POSITION_TOLERANCE &&
+                labs(errorB) > POSITION_TOLERANCE)
             {
-                int magnitude = abs(pwmA);
+                syncActive = true;
 
-                magnitude -= syncCorrection;
 
-                if (magnitude < 0)
+                // =============================================
+                // Motor A is master
+                // =============================================
+                if (absTargetA >= absTargetB)
                 {
-                    magnitude = 0;
+                    float masterProgress = progressA;
+
+                    if (masterProgress < 0.0f)
+                        masterProgress = 0.0f;
+
+                    if (masterProgress > 1.0f)
+                        masterProgress = 1.0f;
+
+
+                    // Where B SHOULD be right now
+                    long desiredB =
+                        (long)round((float)targetB * masterProgress);
+
+                    long pathErrorB =
+                        desiredB - encoderB;
+
+
+                    int correction =
+                        (int)round(PATH_KP * pathErrorB);
+
+                    correction = clampInt(
+                        correction,
+                        -PATH_MAX_CORRECTION,
+                        PATH_MAX_CORRECTION
+                    );
+
+
+                    pwmB += correction;
+
+
+                    // Do not let path correction command B
+                    // opposite to its current position error
+                    if (errorB > 0 && pwmB < 0)
+                    {
+                        pwmB = 0;
+                    }
+                    else if (errorB < 0 && pwmB > 0)
+                    {
+                        pwmB = 0;
+                    }
                 }
 
-                pwmA = (errorA >= 0) ? magnitude : -magnitude;
-            }
 
-            // B is ahead -> slow B
-            else if (progressError < 0.0f)
-            {
-                int magnitude = abs(pwmB);
-
-                magnitude -= syncCorrection;
-
-                if (magnitude < 0)
+                // =============================================
+                // Motor B is master
+                // =============================================
+                else
                 {
-                    magnitude = 0;
+                    float masterProgress = progressB;
+
+                    if (masterProgress < 0.0f)
+                        masterProgress = 0.0f;
+
+                    if (masterProgress > 1.0f)
+                        masterProgress = 1.0f;
+
+
+                    // Where A SHOULD be right now
+                    long desiredA =
+                        (long)round((float)targetA * masterProgress);
+
+                    long pathErrorA =
+                        desiredA - encoderA;
+
+
+                    int correction =
+                        (int)round(PATH_KP * pathErrorA);
+
+                    correction = clampInt(
+                        correction,
+                        -PATH_MAX_CORRECTION,
+                        PATH_MAX_CORRECTION
+                    );
+
+
+                    pwmA += correction;
+
+
+                    if (errorA > 0 && pwmA < 0)
+                    {
+                        pwmA = 0;
+                    }
+                    else if (errorA < 0 && pwmA > 0)
+                    {
+                        pwmA = 0;
+                    }
                 }
 
-                pwmB = (errorB >= 0) ? magnitude : -magnitude;
+
+                // Absolute motor limits
+                pwmA = clampInt(pwmA, -moveMaxPWM, moveMaxPWM);
+                pwmB = clampInt(pwmB, -moveMaxPWM, moveMaxPWM);
             }
         }
 
         // ======================================================
         // STATIC FRICTION / LOW PWM HANDLING
         // ======================================================
-
-        // Is each motor currently ahead of the desired trajectory?
-        bool motorAAhead = syncActive && progressError > 0.0f;
-        bool motorBAhead =  syncActive && progressError < 0.0f;
 
 
         // ------------------------------
@@ -472,30 +540,30 @@
         static unsigned long lastPrintTime = 0;
         const unsigned long PRINT_INTERVAL_MS = 100;
 
-        if (now - lastPrintTime >= PRINT_INTERVAL_MS)
-        {
-            Serial.print(now - moveStartTime);
-            Serial.print(",");
+        // if (now - lastPrintTime >= PRINT_INTERVAL_MS)
+        // {
+        //     Serial.print(now - moveStartTime);
+        //     Serial.print(",");
 
-            Serial.print(encoderA);
-            Serial.print(",");
-            Serial.print(targetA);
-            Serial.print(",");
-            Serial.print(errorA);
-            Serial.print(",");
-            Serial.print(pwmA);
-            Serial.print(",");
+        //     Serial.print(encoderA);
+        //     Serial.print(",");
+        //     Serial.print(targetA);
+        //     Serial.print(",");
+        //     Serial.print(errorA);
+        //     Serial.print(",");
+        //     Serial.print(pwmA);
+        //     Serial.print(",");
 
-            Serial.print(encoderB);
-            Serial.print(",");
-            Serial.print(targetB);
-            Serial.print(",");
-            Serial.print(errorB);
-            Serial.print(",");
-            Serial.println(pwmB);
+        //     Serial.print(encoderB);
+        //     Serial.print(",");
+        //     Serial.print(targetB);
+        //     Serial.print(",");
+        //     Serial.print(errorB);
+        //     Serial.print(",");
+        //     Serial.println(pwmB);
 
-            lastPrintTime = now;
-        }
+        //     lastPrintTime = now;
+        // }
 
         driveMotorA(pwmA);
         driveMotorB(pwmB);
