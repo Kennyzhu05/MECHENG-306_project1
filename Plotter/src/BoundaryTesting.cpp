@@ -1,3 +1,30 @@
+/*
+ * =====================================================
+ * Boundary Testing
+ * =====================================================
+ *
+ * This file is used to test the physical travel limits
+ * of the XY plotter and determine the encoder counts
+ * between opposite boundaries.
+ *
+ * The test first homes the plotter to the bottom-left
+ * origin, then moves the carriage to:
+ *
+ *   1. The top boundary
+ *   2. The right boundary
+ *
+ * The left and right encoder counts are recorded when
+ * each boundary is reached. These values are then used
+ * to determine the total X and Y travel in encoder counts.
+ *
+ * The experimental results are recorded separately in
+ * an Excel spreadsheet for comparison and analysis.
+ *
+ * This is a testing/calibration file and is not part of
+ * the normal plotter motion control operation.
+ * =====================================================
+ */
+
 #include <Arduino.h>
 
 #include "BoundaryTesting.h"

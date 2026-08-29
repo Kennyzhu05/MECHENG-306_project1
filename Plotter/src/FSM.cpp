@@ -39,9 +39,7 @@ bool FSM::isIdle() const
 
 bool FSM::isBusy() const
 {
-    if (currentState == State::MOVING ||
-        currentState == State::HOMING ||
-        currentState == State::INITIALIZING)
+    if (currentState == State::MOVING || currentState == State::HOMING || currentState == State::INITIALIZING)
     {
         return true;
     }
@@ -93,7 +91,9 @@ void FSM::updateState()
 void FSM::changeState(State newState)
 {
     if(currentState == newState)
+    {
         return;
+    }
 
     exitState(currentState);
 
@@ -207,9 +207,7 @@ bool FSM::encoderReady()
 //--------------------------------
 void FSM::initializingUpdate()
 {
-    if (motorsReady() &&
-        switchesReady() &&
-        encoderReady())
+    if (motorsReady() && switchesReady() && encoderReady())
     {
         processEvent(Event::INIT_SUCCESS);
     }
@@ -414,7 +412,7 @@ void FSM::movingUpdate()
     }
 
     // If the movement takes too long,
-    // move the FSM into FAULT.
+    // settle down and move the FSM into IDLE.
     if (isMotionTimedOut())
     {
         processEvent(Event::TIMEOUT);
@@ -442,9 +440,7 @@ void FSM::processEvent(Event event)
 
     if (event == Event::M999_RECEIVED)
     {
-        Serial.println(
-            "M999: stopping current operation"
-        );
+        Serial.println("M999: stopping current operation");
 
         // Immediately stop any motor movement
         abortMotion();
@@ -484,23 +480,20 @@ void FSM::processEvent(Event event)
 
             if(event == Event::G28_RECEIVED)
             {
-                if(event == Event::G28_RECEIVED)
-                   if(event == Event::G28_RECEIVED)
-                    {
-                        // Get current physical switch states
-                        updateLimitSwitches();
+                // Get current physical switch states
+                updateLimitSwitches();
 
-                        // Remember which switches were already pressed
-                        // BEFORE homing starts
-                        startTopLimitActive = topLimitReached();
-                        startBottomLimitActive = bottomLimitReached();
-                        startLeftLimitActive = leftLimitReached();
-                        startRightLimitActive = rightLimitReached();
+                // Remember which switches were already pressed
+                // BEFORE homing starts
+                startTopLimitActive = topLimitReached();
+                startBottomLimitActive = bottomLimitReached();
+                startLeftLimitActive = leftLimitReached();
+                startRightLimitActive = rightLimitReached();
 
-                        changeState(State::HOMING);
+                changeState(State::HOMING);
 
-                        startHoming();
-                    }
+                startHoming();
+
             }
 
             else if(event == Event::G1_RECEIVED)
@@ -509,7 +502,7 @@ void FSM::processEvent(Event event)
                 long targetY = gcodeParser.getTargetY();
                 long targetFeedRate = gcodeParser.getTargetFeedRate();
                             
-                            // Make sure we are checking the latest switch states
+                // Make sure we are checking the latest switch states
                 updateLimitSwitches();
 
                 // -------------------------------------------------
@@ -560,11 +553,6 @@ void FSM::processEvent(Event event)
                 startMotion(mmToXCounts(targetX), mmToYCounts(targetY), targetFeedRate);
             }
 
-            // else if (event == Event::LIMIT_TRIGGERED)
-            // {
-            //     changeState(State::FAULT);
-            // }
-
             break;
 
 
@@ -576,11 +564,6 @@ void FSM::processEvent(Event event)
             }
 
             else if(event == Event::HOMING_ERROR)
-            {
-                changeState(State::FAULT);
-            }
-
-            else if (event == Event::TIMEOUT)
             {
                 changeState(State::FAULT);
             }

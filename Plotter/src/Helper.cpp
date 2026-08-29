@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <math.h>
-
 #include "Helper.h"
 #include "Motion.h"
 #include "Motor.h"

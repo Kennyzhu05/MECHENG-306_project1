@@ -78,19 +78,11 @@ void setupEncoders()
 
 
     // Interrupt whenever LEFT A changes HIGH <-> LOW
-    attachInterrupt(
-        digitalPinToInterrupt(LEFT_ENCODER_A),
-        leftEncoderISR,
-        CHANGE
-    );
+    attachInterrupt(digitalPinToInterrupt(LEFT_ENCODER_A), leftEncoderISR, CHANGE);
 
 
     // Interrupt whenever RIGHT A changes HIGH <-> LOW
-    attachInterrupt(
-        digitalPinToInterrupt(RIGHT_ENCODER_A),
-        rightEncoderISR,
-        CHANGE
-    );
+    attachInterrupt(digitalPinToInterrupt(RIGHT_ENCODER_A), rightEncoderISR, CHANGE);
 }
 
 

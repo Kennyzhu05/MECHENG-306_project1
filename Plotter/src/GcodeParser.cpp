@@ -84,8 +84,7 @@ void GCodeParser::parseGCode(char* command)
     // Convert lowercase letters to uppercase
     for (size_t i = 0; command[i] != '\0'; i++)
     {
-        command[i] =
-            static_cast<char>(toupper(command[i]));
+        command[i] = static_cast<char>(toupper(command[i]));
     }
 
     // -----------------------------
@@ -121,7 +120,8 @@ void GCodeParser::parseGCode(char* command)
 
     if (strcmp(command, "G28") == 0)
     {
-      Serial.println("G28 accepted: Homing command received");
+        Serial.println("G28 accepted: Homing command received");
+
         fsm.processEvent(Event::G28_RECEIVED);
         return;
     }
@@ -131,39 +131,36 @@ void GCodeParser::parseGCode(char* command)
     // -----------------------------
 
     if (parseG1(command))
-{
-    // If machine is IDLE, execute G1 immediately
-    if (fsm.isIdle())
     {
-        Serial.println("G1 accepted: executing now");
-
-        fsm.processEvent(Event::G1_RECEIVED);
-    }
-
-    // If machine is busy, store command in queue
-    else if (fsm.isBusy())
-    {
-        if (enqueueG1(
-                targetX,
-                targetY,
-                targetFeedRate))
+        // If machine is IDLE, execute G1 immediately
+        if (fsm.isIdle())
         {
-            Serial.println("G1 queued");
+            Serial.println("G1 accepted: executing now");
+
+            fsm.processEvent(Event::G1_RECEIVED);
         }
-        else
+
+        // If machine is busy, store command in queue
+        else if (fsm.isBusy())
         {
-            Serial.println("ERROR: G1 queue full");
+            if (enqueueG1(targetX, targetY, targetFeedRate))
+            {
+                Serial.println("G1 queued");
+            }
+            else
+            {
+                Serial.println("ERROR: G1 queue full");
+            }
         }
-    }
 
-    // If machine is in FAULT, reject command
-    else if (fsm.isFault())
-    {
-        Serial.println("ERROR: G1 rejected - system in FAULT");
-    }
+        // If machine is in FAULT, reject command
+        else if (fsm.isFault())
+        {
+            Serial.println("ERROR: G1 rejected - system in FAULT");
+        }
 
-    return;
-}
+        return;
+    }
 
     Serial.println("ERROR: invalid G-code");
 }
@@ -204,11 +201,7 @@ bool GCodeParser::parseG1(const char* command)
       Both give gNumber = 1.
     */
 
-    long gNumber = strtol(
-        cursor,
-        &endPointer,
-        10
-    );
+    long gNumber = strtol(cursor, &endPointer, 10);
 
     // No number after G, or command is not G1
     if (endPointer == cursor || gNumber != 1)
@@ -379,10 +372,7 @@ bool GCodeParser::parseNumber(
       -10.5
     */
 
-    result = strtod(
-        cursor,
-        &endPointer
-    );
+    result = strtod(cursor, &endPointer);
 
     // No valid number found
     if (endPointer == cursor)
@@ -422,11 +412,7 @@ float GCodeParser::getTargetFeedRate() const
 // Add G1 command to queue
 // =====================================================
 
-bool GCodeParser::enqueueG1(
-    float x,
-    float y,
-    float f
-)
+bool GCodeParser::enqueueG1(float x, float y, float f)
 {
     // Queue is full
     if (queueCount >= QUEUE_SIZE)
@@ -458,9 +444,7 @@ bool GCodeParser::enqueueG1(
 // Remove oldest G1 command from queue
 // =====================================================
 
-bool GCodeParser::dequeueG1(
-    G1Command& command
-)
+bool GCodeParser::dequeueG1(G1Command& command)
 {
     // Queue is empty
     if (queueCount == 0)

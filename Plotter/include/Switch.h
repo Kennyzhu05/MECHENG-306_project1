@@ -24,6 +24,9 @@ bool canMoveLeft();
 // General status
 bool anyLimitReached();
 bool topRightReached();
+bool topLeftReached();
+bool bottomRightReached();
+bool bottomLeftReached();
 bool homeReached();
 
 // Debugging

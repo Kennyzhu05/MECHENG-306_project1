@@ -101,10 +101,7 @@ private:
 
     bool parseG1(const char* command);
 
-    bool parseNumber(
-        const char*& cursor,
-        float& result
-    );
+    bool parseNumber(const char*& cursor,  float& result);
 
 
     // =====================================================
@@ -116,11 +113,7 @@ private:
 
       Returns false if the queue is full.
     */
-    bool enqueueG1(
-        float x,
-        float y,
-        float f
-    );
+    bool enqueueG1(float x, float y, float f);
 
 
     /*
@@ -128,12 +121,10 @@ private:
 
       Returns false if the queue is empty.
     */
-    bool dequeueG1(
-        G1Command& command
-    );
+    bool dequeueG1(G1Command& command);
 
     // Clear all queued G1 commands
-void clearCommandQueue();
+    void clearCommandQueue();
 };
 
 extern GCodeParser gcodeParser;

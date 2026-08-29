@@ -4,13 +4,12 @@
     #include "Encoder.h"
 
     // ---- Tunable PI gains and limits ----
-    // float KP = 0.9; // previous 0.7
-    // float KI = 0.05;
+
     float KP_A = 0.43;
     float KP_B = 0.43;
     float KI_A = 0.38;
     float KI_B = 0.38;
-    float SYNC_KP = 2;
+    float SYNC_KP = 2; // synchronize between motors
     long SYNC_START_COUNTS = 10;
     int MIN_PWM = 50;      // below this, motors may not overcome static friction
     int START_PWM = 100;
@@ -173,8 +172,7 @@
         long calculatedTargetB = (long)round(targetXmm * B_X_COUNTS_PER_MM - targetYmm * B_Y_COUNTS_PER_MM);
 
         // Check that the requested move is safe
-        if (abs(calculatedTargetA) > MAX_SAFE_TARGET ||
-            abs(calculatedTargetB) > MAX_SAFE_TARGET)
+        if (abs(calculatedTargetA) > MAX_SAFE_TARGET || abs(calculatedTargetB) > MAX_SAFE_TARGET)
         {
             Serial.println("ERROR: Requested movement will cause integer overflow");
 
@@ -197,6 +195,7 @@
         lastResult = MotionResult::NONE;
         motionActive = true;
 
+        // Message for recording data
         Serial.println("time_ms,encoderA,targetA,errorA,pwmA,encoderB,targetB,errorB,pwmB");
     }
 
@@ -280,7 +279,7 @@
 
         // --- Motor A ---
         float outputA = KP_A * errorA + KI_A * integralA;
-        
+        // Prevent saturation
         bool satPosA = (outputA > moveMaxPWM && errorA > 0);
         bool satNegA = (outputA < -moveMaxPWM && errorA < 0);
         if (!satPosA && !satNegA)
@@ -290,7 +289,7 @@
 
         // --- Motor B ---
         float outputB = KP_B * errorB + KI_B * integralB;
-        
+        // Prevent saturation
         bool satPosB = (outputB > moveMaxPWM && errorB > 0);
         bool satNegB = (outputB < -moveMaxPWM && errorB < 0);
         if (!satPosB && !satNegB)
@@ -353,34 +352,16 @@
         int pwmB = toMotorCommand(outputB, errorB, masterTravelled, masterTarget, ratioB);
 
 
-        // // ======================================================
-        // // STOP INDIVIDUAL MOTOR WHEN IT REACHES TARGET
-        // // ======================================================
-
-        // if (labs(errorA) <= POSITION_TOLERANCE)
-        // {
-        //     pwmA = 0;
-        // }
-
-        // if (labs(errorB) <= POSITION_TOLERANCE)
-        // {
-        //     pwmB = 0;
-        // }
-
-
         // ======================================================
         // STRAIGHT-LINE PATH SYNCHRONISATION
         // ======================================================
-
-        bool syncActive = false;
         bool motorAAhead = false;
         bool motorBAhead = false;
 
         float progressA = 0.0f;
         float progressB = 0.0f;
 
-        if (absTargetA > POSITION_TOLERANCE &&
-            absTargetB > POSITION_TOLERANCE)
+        if (absTargetA > POSITION_TOLERANCE && absTargetB > POSITION_TOLERANCE)
         {
             progressA = (float)encoderA / (float)targetA;
             progressB = (float)encoderB / (float)targetB;
@@ -392,7 +373,6 @@
             if (masterTravelled > SYNC_START_COUNTS &&
                 labs(errorA) > POSITION_TOLERANCE && labs(errorB) > POSITION_TOLERANCE)
             {
-                syncActive = true;
 
 
                 // =============================================
@@ -403,11 +383,13 @@
                     float masterProgress = progressA;
 
                     if (masterProgress < 0.0f)
+                    {
                         masterProgress = 0.0f;
-
+                    }
                     if (masterProgress > 1.0f)
+                    {
                         masterProgress = 1.0f;
-
+                    }
 
                     // Where B SHOULD be right now
                     long desiredB = (long)round((float)targetB * masterProgress);
@@ -444,11 +426,13 @@
                     float masterProgress = progressB;
 
                     if (masterProgress < 0.0f)
+                    {
                         masterProgress = 0.0f;
-
+                    }
                     if (masterProgress > 1.0f)
+                    {
                         masterProgress = 1.0f;
-
+                    }
 
                     // Where A SHOULD be right now
                     long desiredA = (long)round((float)targetA * masterProgress);

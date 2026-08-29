@@ -32,8 +32,7 @@ namespace {
     // Debounces a single switch. Call every loop with the current raw reading.
     // Updates confirmedState in place only once the raw reading has been
     // stable for DEBOUNCE_DELAY_MS.
-    void debounceSwitch(bool rawReading, bool &rawLast, unsigned long &lastChangeTime,
-                         bool &confirmedState)
+    void debounceSwitch(bool rawReading, bool &rawLast, unsigned long &lastChangeTime, bool &confirmedState)
     {
         if (rawReading != rawLast)
         {
@@ -145,10 +144,7 @@ bool canMoveLeft()
 // Returns true if any limit switch is pressed
 bool anyLimitReached()
 {
-    return TOP_SWITCH_TOUCHED ||
-           BOTTOM_SWITCH_TOUCHED ||
-           RIGHT_SWITCH_TOUCHED ||
-           LEFT_SWITCH_TOUCHED;
+    return TOP_SWITCH_TOUCHED || BOTTOM_SWITCH_TOUCHED || RIGHT_SWITCH_TOUCHED || LEFT_SWITCH_TOUCHED;
 }
 
 bool topRightReached()
@@ -174,8 +170,7 @@ bool bottomLeftReached()
 // Home position is bottom-left
 bool homeReached()
 {
-    return LEFT_SWITCH_TOUCHED &&
-           BOTTOM_SWITCH_TOUCHED;
+    return LEFT_SWITCH_TOUCHED && BOTTOM_SWITCH_TOUCHED;
 }
 
 
